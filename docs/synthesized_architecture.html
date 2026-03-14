@@ -1,0 +1,1208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>simple_cnn — Synthesized Architecture</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#1a1a2e;color:#fff;font-family:'Segoe UI',Arial,sans-serif;font-size:14px}
+  h1{text-align:center;padding:22px 0 6px;font-size:1.6rem;letter-spacing:2px;color:#e94560}
+  .subtitle{text-align:center;color:#8899bb;font-size:.85rem;margin-bottom:18px;letter-spacing:1px}
+
+  /* ── Tabs ── */
+  .tab-bar{display:flex;gap:4px;padding:0 24px;border-bottom:2px solid #0f3460;flex-wrap:wrap}
+  .tab-btn{padding:9px 18px;background:#16213e;color:#8899bb;border:1px solid #0f3460;border-bottom:none;border-radius:6px 6px 0 0;cursor:pointer;font-size:.82rem;letter-spacing:.5px;transition:all .2s}
+  .tab-btn:hover{background:#0f3460;color:#fff}
+  .tab-btn.active{background:#0f3460;color:#e94560;border-color:#e94560;font-weight:700}
+  .tab-content{display:none;padding:24px;animation:fadeIn .3s}
+  .tab-content.active{display:block}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+  /* ── Panels / cards ── */
+  .panel{background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:18px;margin-bottom:18px}
+  .panel-title{font-size:1rem;font-weight:700;color:#e94560;margin-bottom:12px;border-bottom:1px solid #0f3460;padding-bottom:6px;letter-spacing:1px}
+
+  /* ── Badges / chips ── */
+  .badge{display:inline-block;padding:2px 7px;border-radius:10px;font-size:.72rem;font-weight:700;vertical-align:middle}
+  .b-blue{background:#0f3460;color:#7ecfff;border:1px solid #7ecfff}
+  .b-red{background:#3d0a17;color:#e94560;border:1px solid #e94560}
+  .b-green{background:#0a2e1a;color:#4ecca3;border:1px solid #4ecca3}
+  .b-yellow{background:#2e2a0a;color:#f0c040;border:1px solid #f0c040}
+  .b-purple{background:#1e0a3d;color:#b97fff;border:1px solid #b97fff}
+
+  /* ── SVG schematic ── */
+  svg text{font-family:'Segoe UI',Arial,sans-serif}
+
+  /* ── Block diagram boxes (Tab2) ── */
+  .blk{position:relative;background:#0f3460;border:2px solid #4a8fff;border-radius:6px;padding:8px 12px;font-size:.78rem;text-align:center;color:#fff}
+  .blk-title{font-weight:700;color:#7ecfff;margin-bottom:3px;font-size:.8rem}
+  .blk-sub{color:#aac4ff;font-size:.7rem}
+  .arrow-r{display:flex;align-items:center;color:#e94560;font-size:1.2rem;padding:0 6px}
+  .arrow-d{text-align:center;color:#e94560;font-size:1.2rem;padding:3px 0}
+  .row-flex{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:8px 0}
+  .col-flex{display:flex;flex-direction:column;align-items:center;gap:4px}
+
+  /* ── Resource bars ── */
+  .bar-wrap{margin:8px 0}
+  .bar-label{display:flex;justify-content:space-between;margin-bottom:3px;font-size:.8rem}
+  .bar-track{background:#0a0a1a;border-radius:4px;height:18px;width:100%;position:relative;border:1px solid #0f3460}
+  .bar-fill{height:100%;border-radius:4px;transition:width 1s ease;display:flex;align-items:center;padding-left:6px;font-size:.72rem;font-weight:700}
+  .bar-lut{background:linear-gradient(90deg,#0f3460,#4a8fff)}
+  .bar-ff{background:linear-gradient(90deg,#1a3d1a,#4ecca3)}
+  .bar-dsp{background:linear-gradient(90deg,#3d0a17,#e94560)}
+  .bar-bram{background:linear-gradient(90deg,#2e1a0a,#f0a040)}
+
+  /* ── Table ── */
+  table{width:100%;border-collapse:collapse;font-size:.8rem}
+  th{background:#0f3460;color:#e94560;padding:8px 10px;text-align:left;letter-spacing:.5px}
+  td{padding:7px 10px;border-bottom:1px solid #0f3460;color:#cdd6f4}
+  tr:hover td{background:#1e2a4a}
+  tr.total-row td{color:#f0c040;font-weight:700;border-top:2px solid #e94560}
+
+  /* ── Code blocks ── */
+  pre{background:#0a0a1a;border:1px solid #0f3460;border-radius:6px;padding:14px;font-family:'Courier New',monospace;font-size:.78rem;overflow-x:auto;line-height:1.6}
+  .kw{color:#e94560}
+  .cm{color:#5a7a9a;font-style:italic}
+  .num{color:#f0c040}
+  .sig{color:#4ecca3}
+  .mod{color:#b97fff}
+  .str{color:#ff9944}
+
+  /* ── Critical path diagram ── */
+  .cp-stage{display:flex;align-items:stretch;margin:4px 0}
+  .cp-label{width:220px;min-width:160px;background:#0f3460;border:1px solid #4a8fff;border-radius:4px 0 0 4px;padding:7px 10px;font-size:.78rem;color:#7ecfff;display:flex;align-items:center}
+  .cp-bar-wrap{flex:1;background:#0a0a1a;border:1px solid #0f3460;border-left:none;border-radius:0 4px 4px 0;display:flex;align-items:center;padding:4px}
+  .cp-bar{height:22px;border-radius:3px;display:flex;align-items:center;padding:0 8px;font-size:.75rem;font-weight:700;color:#fff;white-space:nowrap}
+  .cp-ns{margin-left:8px;color:#aaa;font-size:.75rem}
+  .cp-total{background:#16213e;border:2px solid #e94560;border-radius:6px;padding:12px 16px;margin-top:12px;display:flex;justify-content:space-between;align-items:center}
+  .cp-total .big{font-size:1.4rem;font-weight:700;color:#4ecca3}
+  .cp-total .slack{color:#e94560;font-weight:700}
+
+  /* ── DSP block diagram ── */
+  .dsp-box{background:#16213e;border:3px solid #b97fff;border-radius:10px;padding:16px;max-width:500px;margin:0 auto}
+  .dsp-title{color:#b97fff;font-weight:700;font-size:1rem;text-align:center;margin-bottom:12px;letter-spacing:2px}
+  .dsp-port-row{display:flex;justify-content:space-between;margin:6px 0;font-size:.78rem}
+  .dsp-port-in{color:#7ecfff}
+  .dsp-port-out{color:#4ecca3}
+  .dsp-internal{background:#0a0a1a;border:1px dashed #b97fff;border-radius:4px;padding:8px;margin:8px 0;font-size:.75rem;color:#ccc;text-align:center}
+
+  /* ── Scrollable areas ── */
+  .scroll-x{overflow-x:auto}
+
+  /* ── Window grid ── */
+  .win-grid{display:grid;grid-template-columns:repeat(3,64px);gap:4px;margin:8px auto}
+  .win-cell{background:#0f3460;border:1px solid #4a8fff;border-radius:4px;padding:6px;text-align:center;font-size:.72rem}
+  .win-cell.highlight{background:#3d0a17;border-color:#e94560}
+
+  /* ── Note box ── */
+  .note{background:#1e2d0a;border-left:4px solid #4ecca3;padding:10px 14px;border-radius:0 6px 6px 0;font-size:.8rem;color:#b0d8a4;margin:12px 0}
+  .warn{background:#2d1a0a;border-left:4px solid #f0a040;padding:10px 14px;border-radius:0 6px 6px 0;font-size:.8rem;color:#f0c090;margin:12px 0}
+</style>
+</head>
+<body>
+
+<h1>simple_cnn — Synthesized Architecture</h1>
+<p class="subtitle">RTL → Post-Synthesis Visualization &nbsp;|&nbsp; Target: ZCU104 (xczu7ev) &nbsp;|&nbsp; Vivado 2023.1</p>
+
+<!-- ═══════════════════════════════ TAB BAR ═══════════════════════════════ -->
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="showTab('t1',this)">1 · RTL Schematic</button>
+  <button class="tab-btn" onclick="showTab('t2',this)">2 · conv_layer Internals</button>
+  <button class="tab-btn" onclick="showTab('t3',this)">3 · booth_mult → DSP48E2</button>
+  <button class="tab-btn" onclick="showTab('t4',this)">4 · Resource Utilization</button>
+  <button class="tab-btn" onclick="showTab('t5',this)">5 · Critical Path</button>
+  <button class="tab-btn" onclick="showTab('t6',this)">6 · Synthesis Inference</button>
+</div>
+
+<!-- ═══════════════════════════════ TAB 1 ═══════════════════════════════ -->
+<div id="t1" class="tab-content active">
+  <div class="panel">
+    <div class="panel-title">Top-Level RTL Schematic — simple_cnn Signal Flow</div>
+    <div class="scroll-x">
+    <svg width="980" height="520" viewBox="0 0 980 520" style="display:block;margin:0 auto">
+      <defs>
+        <marker id="arr" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0,8 3,0 6" fill="#7ecfff"/>
+        </marker>
+        <marker id="arr-red" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0,8 3,0 6" fill="#e94560"/>
+        </marker>
+        <marker id="arr-grn" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0,8 3,0 6" fill="#4ecca3"/>
+        </marker>
+        <marker id="arr-ylw" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+          <polygon points="0 0,8 3,0 6" fill="#f0c040"/>
+        </marker>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+
+      <!-- Background grid subtle -->
+      <rect width="980" height="520" fill="#1a1a2e" rx="10"/>
+
+      <!-- ── CLK / RST_N source ── -->
+      <rect x="20" y="200" width="90" height="50" rx="6" fill="#16213e" stroke="#f0c040" stroke-width="2"/>
+      <text x="65" y="221" text-anchor="middle" fill="#f0c040" font-size="11" font-weight="bold">CLK</text>
+      <text x="65" y="236" text-anchor="middle" fill="#f0c040" font-size="11" font-weight="bold">RST_N</text>
+      <text x="65" y="248" text-anchor="middle" fill="#888" font-size="9">system</text>
+
+      <!-- CLK fan to conv and maxpool -->
+      <line x1="110" y1="215" x2="280" y2="215" stroke="#f0c040" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-ylw)"/>
+      <line x1="110" y1="230" x2="760" y2="230" stroke="#f0c040" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <line x1="760" y1="230" x2="760" y2="285" stroke="#f0c040" stroke-width="1.5" stroke-dasharray="5,3" marker-end="url(#arr-ylw)"/>
+      <text x="180" y="210" fill="#f0c040" font-size="9">clk</text>
+      <text x="180" y="244" fill="#f0c040" font-size="9">rst_n</text>
+
+      <!-- ── pixel_in source ── -->
+      <rect x="20" y="290" width="90" height="50" rx="6" fill="#16213e" stroke="#7ecfff" stroke-width="2"/>
+      <text x="65" y="310" text-anchor="middle" fill="#7ecfff" font-size="11" font-weight="bold">pixel_in</text>
+      <text x="65" y="325" text-anchor="middle" fill="#4ecca3" font-size="10">[7:0]</text>
+      <text x="65" y="338" text-anchor="middle" fill="#888" font-size="9">U8 stream</text>
+
+      <!-- pixel_in → conv_layer -->
+      <line x1="110" y1="315" x2="280" y2="315" stroke="#7ecfff" stroke-width="2" marker-end="url(#arr)"/>
+      <!-- badge [7:0] -->
+      <rect x="168" y="306" width="32" height="14" rx="7" fill="#0f3460" stroke="#7ecfff" stroke-width="1"/>
+      <text x="184" y="317" text-anchor="middle" fill="#7ecfff" font-size="9" font-weight="bold">[7:0]</text>
+
+      <!-- ── pixel_valid ── -->
+      <line x1="65" y1="340" x2="65" y2="370" stroke="#4ecca3" stroke-width="1.5"/>
+      <line x1="65" y1="370" x2="280" y2="370" stroke="#4ecca3" stroke-width="1.5" marker-end="url(#arr-grn)"/>
+      <text x="140" y="365" fill="#4ecca3" font-size="9">pixel_valid</text>
+
+      <!-- ── weights constant ── -->
+      <rect x="20" y="80" width="200" height="60" rx="6" fill="#16213e" stroke="#b97fff" stroke-width="2"/>
+      <text x="120" y="101" text-anchor="middle" fill="#b97fff" font-size="11" font-weight="bold">Hardcoded Weights</text>
+      <text x="120" y="116" text-anchor="middle" fill="#aaa" font-size="9">Vertical-edge Sobel kernel</text>
+      <text x="120" y="129" text-anchor="middle" fill="#f0c040" font-size="9">[-1,0,+1 / -1,0,+1 / -1,0,+1]</text>
+
+      <!-- weights → conv_layer -->
+      <line x1="220" y1="120" x2="310" y2="120" stroke="#b97fff" stroke-width="1.5"/>
+      <line x1="310" y1="120" x2="310" y2="280" stroke="#b97fff" stroke-width="1.5" marker-end="url(#arr)"/>
+      <rect x="224" y="111" width="36" height="14" rx="7" fill="#1e0a3d" stroke="#b97fff" stroke-width="1"/>
+      <text x="242" y="122" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">[71:0]</text>
+
+      <!-- ══════════════ CONV_LAYER block ══════════════ -->
+      <rect x="280" y="265" width="185" height="150" rx="8" fill="#16213e" stroke="#4a8fff" stroke-width="2.5" filter="url(#glow)"/>
+      <rect x="280" y="265" width="185" height="28" rx="8" fill="#0f3460"/>
+      <rect x="280" y="285" width="185" height="8" fill="#0f3460"/>
+      <text x="372" y="284" text-anchor="middle" fill="#7ecfff" font-size="12" font-weight="bold">conv_layer</text>
+      <text x="372" y="302" text-anchor="middle" fill="#aaa" font-size="9">IMAGE_WIDTH=8, FILTER_SIZE=3</text>
+      <text x="372" y="316" text-anchor="middle" fill="#aaa" font-size="9">OUTPUT_WIDTH=6</text>
+
+      <!-- conv internals hint -->
+      <rect x="294" y="326" width="157" height="14" rx="3" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+      <text x="372" y="337" text-anchor="middle" fill="#5a8aaa" font-size="8">16× delay FFs + 6 tap regs</text>
+      <rect x="294" y="344" width="157" height="14" rx="3" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+      <text x="372" y="355" text-anchor="middle" fill="#5a8aaa" font-size="8">9× booth_mult (9× DSP48E2)</text>
+      <rect x="294" y="362" width="157" height="14" rx="3" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+      <text x="372" y="373" text-anchor="middle" fill="#5a8aaa" font-size="8">adder tree + saturator</text>
+      <rect x="294" y="380" width="157" height="14" rx="3" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+      <text x="372" y="391" text-anchor="middle" fill="#5a8aaa" font-size="8">col_cnt[3:0], rows_full, row_fill[1:0]</text>
+
+      <!-- Port labels on conv_layer -->
+      <text x="284" y="320" fill="#aac4ff" font-size="8">pixel_in→</text>
+      <text x="284" y="335" fill="#aac4ff" font-size="8">pixel_valid→</text>
+      <text x="284" y="350" fill="#b97fff" font-size="8">weights→</text>
+      <text x="284" y="280" fill="#f0c040" font-size="8">clk,rst_n→</text>
+
+      <!-- conv_layer → feature_map [15:0] -->
+      <line x1="465" y1="305" x2="580" y2="305" stroke="#7ecfff" stroke-width="2" marker-end="url(#arr)"/>
+      <rect x="493" y="296" width="36" height="14" rx="7" fill="#0f3460" stroke="#7ecfff" stroke-width="1"/>
+      <text x="511" y="307" text-anchor="middle" fill="#7ecfff" font-size="9" font-weight="bold">[15:0]</text>
+      <text x="510" y="292" fill="#aaa" font-size="9">feature_map</text>
+
+      <!-- conv_valid -->
+      <line x1="465" y1="360" x2="540" y2="360" stroke="#4ecca3" stroke-width="1.5"/>
+      <line x1="540" y1="360" x2="540" y2="380" stroke="#4ecca3" stroke-width="1.5"/>
+      <line x1="540" y1="380" x2="620" y2="380" stroke="#4ecca3" stroke-width="1.5" marker-end="url(#arr-grn)"/>
+      <text x="488" y="355" fill="#4ecca3" font-size="9">conv_valid</text>
+
+      <!-- ══════════════ RELU block ══════════════ -->
+      <rect x="580" y="275" width="130" height="75" rx="8" fill="#16213e" stroke="#4ecca3" stroke-width="2.5" filter="url(#glow)"/>
+      <rect x="580" y="275" width="130" height="22" rx="8" fill="#0a2e1a"/>
+      <rect x="580" y="289" width="130" height="8" fill="#0a2e1a"/>
+      <text x="645" y="289" text-anchor="middle" fill="#4ecca3" font-size="12" font-weight="bold">relu</text>
+      <text x="645" y="308" text-anchor="middle" fill="#aaa" font-size="9">combinational</text>
+      <text x="645" y="321" text-anchor="middle" fill="#aaa" font-size="9">always @(in)</text>
+      <text x="645" y="336" text-anchor="middle" fill="#5a9a7a" font-size="8">sign-check + saturate</text>
+
+      <!-- relu → relu_out -->
+      <line x1="710" y1="312" x2="760" y2="312" stroke="#4ecca3" stroke-width="2" marker-end="url(#arr-grn)"/>
+      <rect x="716" y="303" width="32" height="14" rx="7" fill="#0a2e1a" stroke="#4ecca3" stroke-width="1"/>
+      <text x="732" y="314" text-anchor="middle" fill="#4ecca3" font-size="9" font-weight="bold">[7:0]</text>
+      <text x="730" y="300" fill="#aaa" font-size="9">relu_out</text>
+
+      <!-- relu_valid wire label -->
+      <text x="578" y="376" fill="#4ecca3" font-size="9">relu_valid = conv_valid</text>
+
+      <!-- ══════════════ MAX_POOL block ══════════════ -->
+      <rect x="760" y="270" width="165" height="110" rx="8" fill="#16213e" stroke="#e94560" stroke-width="2.5" filter="url(#glow)"/>
+      <rect x="760" y="270" width="165" height="22" rx="8" fill="#3d0a17"/>
+      <rect x="760" y="284" width="165" height="8" fill="#3d0a17"/>
+      <text x="842" y="285" text-anchor="middle" fill="#e94560" font-size="12" font-weight="bold">max_pool</text>
+      <text x="842" y="307" text-anchor="middle" fill="#aaa" font-size="9">POOL_SIZE=2 (2×2 window)</text>
+      <text x="842" y="320" text-anchor="middle" fill="#aaa" font-size="9">4 samples per output</text>
+
+      <rect x="774" y="330" width="137" height="13" rx="3" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+      <text x="842" y="340" text-anchor="middle" fill="#5a6a8a" font-size="8">max_val[7:0] + count_r[1:0] FFs</text>
+      <rect x="774" y="347" width="137" height="13" rx="3" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+      <text x="842" y="357" text-anchor="middle" fill="#5a6a8a" font-size="8">unsigned comparator (8 LUTs)</text>
+
+      <!-- max_pool outputs -->
+      <line x1="925" y1="305" x2="965" y2="305" stroke="#e94560" stroke-width="2" marker-end="url(#arr-red)"/>
+      <rect x="928" y="296" width="32" height="14" rx="7" fill="#3d0a17" stroke="#e94560" stroke-width="1"/>
+      <text x="944" y="307" text-anchor="middle" fill="#e94560" font-size="9" font-weight="bold">[7:0]</text>
+
+      <line x1="925" y1="350" x2="965" y2="350" stroke="#4ecca3" stroke-width="1.5" marker-end="url(#arr-grn)"/>
+
+      <!-- Output labels -->
+      <text x="967" y="300" fill="#e94560" font-size="10" font-weight="bold">pooled_out</text>
+      <text x="967" y="313" fill="#e94560" font-size="9">[7:0]</text>
+      <text x="967" y="345" fill="#4ecca3" font-size="10" font-weight="bold">pool_valid</text>
+
+      <!-- relu_valid → max_pool data_valid -->
+      <line x1="620" y1="380" x2="780" y2="380" stroke="#4ecca3" stroke-width="1.5"/>
+      <line x1="780" y1="380" x2="780" y2="370" stroke="#4ecca3" stroke-width="1.5" marker-end="url(#arr-grn)"/>
+      <text x="670" y="395" fill="#4ecca3" font-size="9">data_valid</text>
+
+      <!-- pipeline stage labels -->
+      <text x="372" y="258" text-anchor="middle" fill="#4a8fff" font-size="10" font-weight="bold">STAGE 1 — registered</text>
+      <text x="645" y="258" text-anchor="middle" fill="#4ecca3" font-size="10" font-weight="bold">STAGE 2 — comb</text>
+      <text x="842" y="258" text-anchor="middle" fill="#e94560" font-size="10" font-weight="bold">STAGE 3 — registered</text>
+
+      <!-- Pipeline dashed separators -->
+      <line x1="470" y1="245" x2="470" y2="460" stroke="#333" stroke-width="1" stroke-dasharray="4,4"/>
+      <line x1="720" y1="245" x2="720" y2="460" stroke="#333" stroke-width="1" stroke-dasharray="4,4"/>
+
+      <!-- Legend -->
+      <rect x="20" y="430" width="560" height="72" rx="6" fill="#16213e" stroke="#0f3460" stroke-width="1"/>
+      <text x="36" y="448" fill="#888" font-size="10" font-weight="bold">LEGEND</text>
+      <line x1="36" y1="460" x2="80" y2="460" stroke="#7ecfff" stroke-width="2"/>
+      <text x="86" y="464" fill="#ccc" font-size="9">Data bus (width badge)</text>
+      <line x1="200" y1="460" x2="244" y2="460" stroke="#4ecca3" stroke-width="1.5"/>
+      <text x="250" y="464" fill="#ccc" font-size="9">Control signal</text>
+      <line x1="340" y1="460" x2="384" y2="460" stroke="#f0c040" stroke-width="1.5" stroke-dasharray="5,3"/>
+      <text x="390" y="464" fill="#ccc" font-size="9">Clock / Reset</text>
+      <line x1="460" y1="460" x2="504" y2="460" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="510" y="464" fill="#ccc" font-size="9">Weight constant</text>
+
+      <rect x="36" y="472" width="12" height="12" rx="2" fill="#0f3460" stroke="#4a8fff" stroke-width="1.5"/>
+      <text x="54" y="482" fill="#ccc" font-size="9">Registered block</text>
+      <rect x="200" y="472" width="12" height="12" rx="2" fill="#0a2e1a" stroke="#4ecca3" stroke-width="1.5"/>
+      <text x="218" y="482" fill="#ccc" font-size="9">Combinational block</text>
+      <rect x="340" y="472" width="12" height="12" rx="2" fill="#3d0a17" stroke="#e94560" stroke-width="1.5"/>
+      <text x="358" y="482" fill="#ccc" font-size="9">Pooling block</text>
+    </svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Top-Level Port Summary</div>
+    <table>
+      <tr><th>Port</th><th>Width</th><th>Direction</th><th>Description</th></tr>
+      <tr><td>clk</td><td><span class="badge b-yellow">1</span></td><td>input</td><td>System clock (100 MHz target)</td></tr>
+      <tr><td>rst_n</td><td><span class="badge b-yellow">1</span></td><td>input</td><td>Active-low synchronous reset</td></tr>
+      <tr><td>pixel_in</td><td><span class="badge b-blue">[7:0]</span></td><td>input</td><td>Unsigned 8-bit pixel (U8), 1 per cycle</td></tr>
+      <tr><td>pixel_valid</td><td><span class="badge b-green">1</span></td><td>input</td><td>Data-valid handshake from upstream</td></tr>
+      <tr><td>pooled_out</td><td><span class="badge b-red">[7:0]</span></td><td>output</td><td>Max-pooled result, unsigned 8-bit</td></tr>
+      <tr><td>pool_valid</td><td><span class="badge b-green">1</span></td><td>output</td><td>Asserted 1 cycle when pooled_out is valid</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TAB 2 ═══════════════════════════════ -->
+<div id="t2" class="tab-content">
+  <div class="panel">
+    <div class="panel-title">conv_layer Internal Architecture</div>
+    <div class="scroll-x">
+    <svg width="960" height="640" viewBox="0 0 960 640" style="display:block;margin:0 auto">
+      <defs>
+        <marker id="a2" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#7ecfff"/></marker>
+        <marker id="a2r" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#e94560"/></marker>
+        <marker id="a2g" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#4ecca3"/></marker>
+        <marker id="a2p" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="#b97fff"/></marker>
+      </defs>
+      <rect width="960" height="640" fill="#1a1a2e" rx="8"/>
+
+      <!-- ── pixel_in input ── -->
+      <rect x="10" y="260" width="72" height="34" rx="5" fill="#0f3460" stroke="#7ecfff" stroke-width="1.5"/>
+      <text x="46" y="276" text-anchor="middle" fill="#7ecfff" font-size="10" font-weight="bold">pixel_in</text>
+      <text x="46" y="288" text-anchor="middle" fill="#4ecca3" font-size="9">[7:0]</text>
+
+      <!-- ── delay1 shift register ── -->
+      <!-- 8 cells -->
+      <text x="130" y="185" fill="#f0c040" font-size="10" font-weight="bold">delay1[0:7]  — 1-row line buffer (8 × 8-bit FFs)</text>
+      <rect x="100" y="195" width="380" height="40" rx="5" fill="#16213e" stroke="#f0c040" stroke-width="1.5"/>
+      <!-- cells -->
+      <rect x="104" y="199" width="42" height="32" rx="3" fill="#0f3460" stroke="#f0c040" stroke-width="1"/>
+      <text x="125" y="215" text-anchor="middle" fill="#fff" font-size="9">[0]</text>
+      <text x="125" y="226" text-anchor="middle" fill="#888" font-size="8">←pix</text>
+      <rect x="150" y="199" width="42" height="32" rx="3" fill="#0a1a2e" stroke="#f0c040" stroke-width="1"/>
+      <text x="171" y="215" text-anchor="middle" fill="#ccc" font-size="9">[1]</text>
+      <rect x="196" y="199" width="42" height="32" rx="3" fill="#0a1a2e" stroke="#f0c040" stroke-width="1"/>
+      <text x="217" y="215" text-anchor="middle" fill="#ccc" font-size="9">[2]</text>
+      <rect x="242" y="199" width="42" height="32" rx="3" fill="#0a1a2e" stroke="#f0c040" stroke-width="1"/>
+      <text x="263" y="215" text-anchor="middle" fill="#ccc" font-size="9">[3]</text>
+      <rect x="288" y="199" width="42" height="32" rx="3" fill="#0a1a2e" stroke="#f0c040" stroke-width="1"/>
+      <text x="309" y="215" text-anchor="middle" fill="#ccc" font-size="9">[4]</text>
+      <rect x="334" y="199" width="42" height="32" rx="3" fill="#0a1a2e" stroke="#f0c040" stroke-width="1"/>
+      <text x="355" y="215" text-anchor="middle" fill="#ccc" font-size="9">[5]</text>
+      <rect x="380" y="199" width="42" height="32" rx="3" fill="#0a1a2e" stroke="#f0c040" stroke-width="1"/>
+      <text x="401" y="215" text-anchor="middle" fill="#ccc" font-size="9">[6]</text>
+      <rect x="426" y="199" width="50" height="32" rx="3" fill="#1e2a0a" stroke="#4ecca3" stroke-width="1.5"/>
+      <text x="451" y="213" text-anchor="middle" fill="#4ecca3" font-size="9" font-weight="bold">[7]</text>
+      <text x="451" y="224" text-anchor="middle" fill="#4ecca3" font-size="8">tail→</text>
+      <text x="451" y="233" text-anchor="middle" fill="#888" font-size="7">px[5],tap_row1</text>
+
+      <!-- shift arrows in delay1 -->
+      <text x="147" y="220" fill="#f0c040" font-size="12">→</text>
+      <text x="193" y="220" fill="#f0c040" font-size="12">→</text>
+      <text x="239" y="220" fill="#f0c040" font-size="12">→</text>
+      <text x="285" y="220" fill="#f0c040" font-size="12">→</text>
+      <text x="331" y="220" fill="#f0c040" font-size="12">→</text>
+      <text x="377" y="220" fill="#f0c040" font-size="12">→</text>
+      <text x="423" y="220" fill="#f0c040" font-size="12">→</text>
+
+      <!-- pixel_in → delay1[0] -->
+      <line x1="82" y1="270" x2="100" y2="270" stroke="#7ecfff" stroke-width="1.5"/>
+      <line x1="100" y1="270" x2="100" y2="215" stroke="#7ecfff" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <!-- ── delay2 shift register ── -->
+      <text x="130" y="265" fill="#b97fff" font-size="10" font-weight="bold">delay2[0:7]  — 2-row line buffer (8 × 8-bit FFs)</text>
+      <rect x="100" y="275" width="380" height="40" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <rect x="104" y="279" width="42" height="32" rx="3" fill="#1e0a3d" stroke="#b97fff" stroke-width="1"/>
+      <text x="125" y="295" text-anchor="middle" fill="#fff" font-size="9">[0]</text>
+      <text x="125" y="306" text-anchor="middle" fill="#888" font-size="8">←d1[7]</text>
+      <rect x="150" y="279" width="42" height="32" rx="3" fill="#0a0a1a" stroke="#b97fff" stroke-width="1"/>
+      <text x="171" y="295" text-anchor="middle" fill="#ccc" font-size="9">[1]</text>
+      <rect x="196" y="279" width="42" height="32" rx="3" fill="#0a0a1a" stroke="#b97fff" stroke-width="1"/>
+      <text x="217" y="295" text-anchor="middle" fill="#ccc" font-size="9">[2]</text>
+      <rect x="242" y="279" width="42" height="32" rx="3" fill="#0a0a1a" stroke="#b97fff" stroke-width="1"/>
+      <text x="263" y="295" text-anchor="middle" fill="#ccc" font-size="9">[3]</text>
+      <rect x="288" y="279" width="42" height="32" rx="3" fill="#0a0a1a" stroke="#b97fff" stroke-width="1"/>
+      <text x="309" y="295" text-anchor="middle" fill="#ccc" font-size="9">[4]</text>
+      <rect x="334" y="279" width="42" height="32" rx="3" fill="#0a0a1a" stroke="#b97fff" stroke-width="1"/>
+      <text x="355" y="295" text-anchor="middle" fill="#ccc" font-size="9">[5]</text>
+      <rect x="380" y="279" width="42" height="32" rx="3" fill="#0a0a1a" stroke="#b97fff" stroke-width="1"/>
+      <text x="401" y="295" text-anchor="middle" fill="#ccc" font-size="9">[6]</text>
+      <rect x="426" y="279" width="50" height="32" rx="3" fill="#1e0a2e" stroke="#e94560" stroke-width="1.5"/>
+      <text x="451" y="293" text-anchor="middle" fill="#e94560" font-size="9" font-weight="bold">[7]</text>
+      <text x="451" y="304" text-anchor="middle" fill="#e94560" font-size="8">tail→</text>
+      <text x="451" y="313" text-anchor="middle" fill="#888" font-size="7">px[2],tap_row2</text>
+
+      <text x="147" y="300" fill="#b97fff" font-size="12">→</text>
+      <text x="193" y="300" fill="#b97fff" font-size="12">→</text>
+      <text x="239" y="300" fill="#b97fff" font-size="12">→</text>
+      <text x="285" y="300" fill="#b97fff" font-size="12">→</text>
+      <text x="331" y="300" fill="#b97fff" font-size="12">→</text>
+      <text x="377" y="300" fill="#b97fff" font-size="12">→</text>
+      <text x="423" y="300" fill="#b97fff" font-size="12">→</text>
+
+      <!-- delay1[7] → delay2[0] -->
+      <line x1="480" y1="215" x2="510" y2="215" stroke="#f0c040" stroke-width="1.2"/>
+      <line x1="510" y1="215" x2="510" y2="295" stroke="#f0c040" stroke-width="1.2"/>
+      <line x1="510" y1="295" x2="480" y2="295" stroke="#f0c040" stroke-width="1.2" marker-end="url(#a2p)"/>
+      <text x="516" y="258" fill="#888" font-size="8" transform="rotate(90,516,258)">d1[7]→d2[0]</text>
+
+      <!-- ── Tap registers ── -->
+      <text x="130" y="345" fill="#4ecca3" font-size="10" font-weight="bold">Column Tap Registers (3 rows × 2 taps = 6 × 8-bit FFs)</text>
+
+      <!-- tap_cur -->
+      <rect x="100" y="355" width="90" height="50" rx="5" fill="#16213e" stroke="#4ecca3" stroke-width="1.5"/>
+      <text x="145" y="370" text-anchor="middle" fill="#4ecca3" font-size="9" font-weight="bold">tap_cur</text>
+      <text x="145" y="382" text-anchor="middle" fill="#888" font-size="8">current row</text>
+      <rect x="106" y="388" width="36" height="13" rx="2" fill="#0f3460"/>
+      <text x="124" y="398" text-anchor="middle" fill="#fff" font-size="8">[0] c-2</text>
+      <rect x="147" y="388" width="36" height="13" rx="2" fill="#0f3460"/>
+      <text x="165" y="398" text-anchor="middle" fill="#fff" font-size="8">[1] c-1</text>
+
+      <!-- tap_row1 -->
+      <rect x="215" y="355" width="90" height="50" rx="5" fill="#16213e" stroke="#f0c040" stroke-width="1.5"/>
+      <text x="260" y="370" text-anchor="middle" fill="#f0c040" font-size="9" font-weight="bold">tap_row1</text>
+      <text x="260" y="382" text-anchor="middle" fill="#888" font-size="8">1 row ago</text>
+      <rect x="221" y="388" width="36" height="13" rx="2" fill="#0f3460"/>
+      <text x="239" y="398" text-anchor="middle" fill="#fff" font-size="8">[0] c-2</text>
+      <rect x="262" y="388" width="36" height="13" rx="2" fill="#0f3460"/>
+      <text x="280" y="398" text-anchor="middle" fill="#fff" font-size="8">[1] c-1</text>
+
+      <!-- tap_row2 -->
+      <rect x="330" y="355" width="90" height="50" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="375" y="370" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">tap_row2</text>
+      <text x="375" y="382" text-anchor="middle" fill="#888" font-size="8">2 rows ago</text>
+      <rect x="336" y="388" width="36" height="13" rx="2" fill="#0f3460"/>
+      <text x="354" y="398" text-anchor="middle" fill="#fff" font-size="8">[0] c-2</text>
+      <rect x="377" y="388" width="36" height="13" rx="2" fill="#0f3460"/>
+      <text x="395" y="398" text-anchor="middle" fill="#fff" font-size="8">[1] c-1</text>
+
+      <!-- ── 3×3 pixel window assembly ── -->
+      <text x="560" y="175" text-anchor="middle" fill="#7ecfff" font-size="10" font-weight="bold">3×3 Pixel Window Assembly</text>
+      <!-- grid cells -->
+      <!-- Row 0: tap_row2[0], tap_row2[1], delay2[7] -->
+      <rect x="506" y="185" width="68" height="42" rx="4" fill="#1e0a3d" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="540" y="202" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">px[0]</text>
+      <text x="540" y="215" text-anchor="middle" fill="#aaa" font-size="8">tap_row2[0]</text>
+      <text x="540" y="224" text-anchor="middle" fill="#888" font-size="7">col c-2</text>
+
+      <rect x="578" y="185" width="68" height="42" rx="4" fill="#1e0a3d" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="612" y="202" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">px[1]</text>
+      <text x="612" y="215" text-anchor="middle" fill="#aaa" font-size="8">tap_row2[1]</text>
+      <text x="612" y="224" text-anchor="middle" fill="#888" font-size="7">col c-1</text>
+
+      <rect x="650" y="185" width="68" height="42" rx="4" fill="#2e0a1e" stroke="#e94560" stroke-width="2"/>
+      <text x="684" y="202" text-anchor="middle" fill="#e94560" font-size="9" font-weight="bold">px[2]</text>
+      <text x="684" y="215" text-anchor="middle" fill="#aaa" font-size="8">delay2[7]</text>
+      <text x="684" y="224" text-anchor="middle" fill="#888" font-size="7">col c</text>
+
+      <!-- Row 1 -->
+      <rect x="506" y="231" width="68" height="42" rx="4" fill="#1a2a0a" stroke="#f0c040" stroke-width="1.5"/>
+      <text x="540" y="248" text-anchor="middle" fill="#f0c040" font-size="9" font-weight="bold">px[3]</text>
+      <text x="540" y="261" text-anchor="middle" fill="#aaa" font-size="8">tap_row1[0]</text>
+      <text x="540" y="270" text-anchor="middle" fill="#888" font-size="7">col c-2</text>
+
+      <rect x="578" y="231" width="68" height="42" rx="4" fill="#1a2a0a" stroke="#f0c040" stroke-width="1.5"/>
+      <text x="612" y="248" text-anchor="middle" fill="#f0c040" font-size="9" font-weight="bold">px[4]</text>
+      <text x="612" y="261" text-anchor="middle" fill="#aaa" font-size="8">tap_row1[1]</text>
+      <text x="612" y="270" text-anchor="middle" fill="#888" font-size="7">col c-1</text>
+
+      <rect x="650" y="231" width="68" height="42" rx="4" fill="#2e0a1e" stroke="#e94560" stroke-width="2"/>
+      <text x="684" y="248" text-anchor="middle" fill="#e94560" font-size="9" font-weight="bold">px[5]</text>
+      <text x="684" y="261" text-anchor="middle" fill="#aaa" font-size="8">delay1[7]</text>
+      <text x="684" y="270" text-anchor="middle" fill="#888" font-size="7">col c</text>
+
+      <!-- Row 2 -->
+      <rect x="506" y="277" width="68" height="42" rx="4" fill="#0a1e2e" stroke="#4ecca3" stroke-width="1.5"/>
+      <text x="540" y="294" text-anchor="middle" fill="#4ecca3" font-size="9" font-weight="bold">px[6]</text>
+      <text x="540" y="307" text-anchor="middle" fill="#aaa" font-size="8">tap_cur[0]</text>
+      <text x="540" y="316" text-anchor="middle" fill="#888" font-size="7">col c-2</text>
+
+      <rect x="578" y="277" width="68" height="42" rx="4" fill="#0a1e2e" stroke="#4ecca3" stroke-width="1.5"/>
+      <text x="612" y="294" text-anchor="middle" fill="#4ecca3" font-size="9" font-weight="bold">px[7]</text>
+      <text x="612" y="307" text-anchor="middle" fill="#aaa" font-size="8">tap_cur[1]</text>
+      <text x="612" y="316" text-anchor="middle" fill="#888" font-size="7">col c-1</text>
+
+      <rect x="650" y="277" width="68" height="42" rx="4" fill="#2e1e0a" stroke="#ff9944" stroke-width="2"/>
+      <text x="684" y="294" text-anchor="middle" fill="#ff9944" font-size="9" font-weight="bold">px[8]</text>
+      <text x="684" y="307" text-anchor="middle" fill="#aaa" font-size="8">pixel_in</text>
+      <text x="684" y="316" text-anchor="middle" fill="#888" font-size="7">newest</text>
+
+      <!-- Row labels -->
+      <text x="492" y="210" fill="#b97fff" font-size="9" text-anchor="end">row-2</text>
+      <text x="492" y="256" fill="#f0c040" font-size="9" text-anchor="end">row-1</text>
+      <text x="492" y="302" fill="#4ecca3" font-size="9" text-anchor="end">row-0</text>
+
+      <!-- ── 9× booth_mult ── -->
+      <rect x="760" y="180" width="175" height="185" rx="6" fill="#16213e" stroke="#e94560" stroke-width="2"/>
+      <text x="847" y="200" text-anchor="middle" fill="#e94560" font-size="10" font-weight="bold">9× booth_mult</text>
+      <text x="847" y="213" text-anchor="middle" fill="#888" font-size="8">(parallel, combinational)</text>
+      <text x="847" y="225" text-anchor="middle" fill="#888" font-size="8">→ 9× DSP48E2</text>
+
+      <!-- 9 small mult boxes -->
+      <rect x="768" y="230" width="66" height="18" rx="3" fill="#0f3460" stroke="#4a8fff" stroke-width="1"/>
+      <text x="801" y="242" text-anchor="middle" fill="#7ecfff" font-size="8">bm[0]: w[0]×px[0]</text>
+      <rect x="768" y="252" width="66" height="18" rx="3" fill="#0f3460" stroke="#4a8fff" stroke-width="1"/>
+      <text x="801" y="264" text-anchor="middle" fill="#7ecfff" font-size="8">bm[1]: w[1]×px[1]</text>
+      <rect x="768" y="274" width="66" height="18" rx="3" fill="#0f3460" stroke="#4a8fff" stroke-width="1"/>
+      <text x="801" y="286" text-anchor="middle" fill="#7ecfff" font-size="8">bm[2]: w[2]×px[2]</text>
+      <rect x="768" y="296" width="66" height="18" rx="3" fill="#0f3460" stroke="#4a8fff" stroke-width="1"/>
+      <text x="801" y="308" text-anchor="middle" fill="#7ecfff" font-size="8">bm[3]: w[3]×px[3]</text>
+      <rect x="768" y="318" width="66" height="18" rx="3" fill="#0f3460" stroke="#4a8fff" stroke-width="1"/>
+      <text x="801" y="330" text-anchor="middle" fill="#7ecfff" font-size="8">bm[4]: w[4]×px[4]</text>
+      <rect x="840" y="230" width="88" height="18" rx="3" fill="#0a0a1a" stroke="#4a8fff" stroke-width="1"/>
+      <text x="884" y="242" text-anchor="middle" fill="#7ecfff" font-size="8">bm[5]: w[5]×px[5]</text>
+      <rect x="840" y="252" width="88" height="18" rx="3" fill="#0a0a1a" stroke="#4a8fff" stroke-width="1"/>
+      <text x="884" y="264" text-anchor="middle" fill="#7ecfff" font-size="8">bm[6]: w[6]×px[6]</text>
+      <rect x="840" y="274" width="88" height="18" rx="3" fill="#0a0a1a" stroke="#4a8fff" stroke-width="1"/>
+      <text x="884" y="286" text-anchor="middle" fill="#7ecfff" font-size="8">bm[7]: w[7]×px[7]</text>
+      <rect x="840" y="296" width="88" height="18" rx="3" fill="#0a0a1a" stroke="#4a8fff" stroke-width="1"/>
+      <text x="884" y="308" text-anchor="middle" fill="#7ecfff" font-size="8">bm[8]: w[8]×px[8]</text>
+
+      <!-- products [15:0] label -->
+      <text x="847" y="350" text-anchor="middle" fill="#aaa" font-size="8">products mac[0..8] → [15:0] each</text>
+      <text x="847" y="362" text-anchor="middle" fill="#aaa" font-size="8">signed 16-bit output</text>
+
+      <!-- 9× → adder tree arrow -->
+      <line x1="847" y1="365" x2="847" y2="390" stroke="#7ecfff" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <!-- ── Adder tree ── -->
+      <rect x="760" y="390" width="175" height="50" rx="6" fill="#16213e" stroke="#4ecca3" stroke-width="2"/>
+      <text x="847" y="408" text-anchor="middle" fill="#4ecca3" font-size="10" font-weight="bold">Adder Tree</text>
+      <text x="847" y="421" text-anchor="middle" fill="#aaa" font-size="8">9 × [15:0] → [19:0] sum</text>
+      <text x="847" y="432" text-anchor="middle" fill="#888" font-size="8">3 levels, carry-chain LUTs</text>
+
+      <!-- adder → saturator -->
+      <line x1="847" y1="440" x2="847" y2="460" stroke="#7ecfff" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <!-- ── Saturator ── -->
+      <rect x="760" y="460" width="175" height="50" rx="6" fill="#16213e" stroke="#f0c040" stroke-width="2"/>
+      <text x="847" y="478" text-anchor="middle" fill="#f0c040" font-size="10" font-weight="bold">Saturator</text>
+      <text x="847" y="491" text-anchor="middle" fill="#aaa" font-size="8">[19:0] → [15:0] signed clamp</text>
+      <text x="847" y="502" text-anchor="middle" fill="#888" font-size="8">[-32768, 32767]</text>
+
+      <!-- saturator → output FF -->
+      <line x1="847" y1="510" x2="847" y2="530" stroke="#7ecfff" stroke-width="1.5" marker-end="url(#a2)"/>
+
+      <!-- ── Output register ── -->
+      <rect x="760" y="530" width="175" height="50" rx="6" fill="#16213e" stroke="#e94560" stroke-width="2.5"/>
+      <text x="847" y="548" text-anchor="middle" fill="#e94560" font-size="10" font-weight="bold">feature_map_out</text>
+      <text x="847" y="561" text-anchor="middle" fill="#aaa" font-size="8">[15:0] FF register</text>
+      <text x="847" y="572" text-anchor="middle" fill="#888" font-size="8">+ out_valid FF</text>
+
+      <!-- px window → booth_mult arrows -->
+      <line x1="718" y1="250" x2="760" y2="280" stroke="#7ecfff" stroke-width="1" marker-end="url(#a2)"/>
+      <text x="730" y="265" fill="#888" font-size="8">px[0..8]</text>
+
+      <!-- state registers label -->
+      <rect x="100" y="430" width="320" height="60" rx="5" fill="#16213e" stroke="#0f3460" stroke-width="1.5"/>
+      <text x="260" y="448" text-anchor="middle" fill="#7ecfff" font-size="10" font-weight="bold">State Registers</text>
+      <text x="260" y="464" text-anchor="middle" fill="#aaa" font-size="9">col_cnt[3:0]  — column counter 0..7  (4 FFs)</text>
+      <text x="260" y="477" text-anchor="middle" fill="#aaa" font-size="9">row_fill[1:0] — fill state 0/1/2  (2 FFs)</text>
+      <text x="260" y="489" text-anchor="middle" fill="#aaa" font-size="9">rows_full — gate flag (1 FF)</text>
+    </svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Weight Unpacking — Row-Major Layout</div>
+    <pre><span class="cm">// 72-bit packed weight bus decoded by genvar k (0..8):</span>
+<span class="kw">assign</span> <span class="sig">w[k]</span> = <span class="sig">weights</span>[k*<span class="num">8</span> +: <span class="num">8</span>];   <span class="cm">// 8-bit slice, auto-unrolled to 9 assigns</span>
+
+<span class="cm">// Kernel layout (Sobel vertical edge):</span>
+<span class="cm">//  w[0]=-1  w[1]= 0  w[2]=+1   ← row 0 (top)</span>
+<span class="cm">//  w[3]=-1  w[4]= 0  w[5]=+1   ← row 1 (middle)</span>
+<span class="cm">//  w[6]=-1  w[7]= 0  w[8]=+1   ← row 2 (bottom)</span></pre>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TAB 3 ═══════════════════════════════ -->
+<div id="t3" class="tab-content">
+  <div class="panel">
+    <div class="panel-title">booth_mult RTL → Vivado DSP48E2 Inference</div>
+    <div style="display:flex;gap:18px;flex-wrap:wrap;align-items:flex-start">
+
+      <!-- DSP block diagram -->
+      <div style="flex:0 0 340px">
+        <div class="dsp-box">
+          <div class="dsp-title">DSP48E2</div>
+          <div style="display:flex;gap:8px;font-size:.78rem">
+            <div style="flex:1">
+              <div style="color:#7ecfff;margin-bottom:6px;font-weight:700">Inputs</div>
+              <div style="background:#0a0a1a;border:1px solid #7ecfff;border-radius:4px;padding:6px;margin:3px 0;font-size:.75rem">
+                <span style="color:#7ecfff">A[29:0]</span><br>
+                <span style="color:#888">sign-ext weight a[7:0]</span><br>
+                <span style="color:#555;font-size:.68rem">{{22{a[7]}}, a} → 30b</span>
+              </div>
+              <div style="background:#0a0a1a;border:1px solid #4ecca3;border-radius:4px;padding:6px;margin:3px 0;font-size:.75rem">
+                <span style="color:#4ecca3">B[17:0]</span><br>
+                <span style="color:#888">activation b[7:0]</span><br>
+                <span style="color:#555;font-size:.68rem">{10'b0, b} → 18b</span>
+              </div>
+            </div>
+            <div style="flex:1">
+              <div style="color:#e94560;margin-bottom:6px;font-weight:700">Outputs</div>
+              <div style="background:#0a0a1a;border:1px solid #e94560;border-radius:4px;padding:6px;margin:3px 0;font-size:.75rem">
+                <span style="color:#e94560">P[47:0]</span><br>
+                <span style="color:#888">full multiply result</span><br>
+                <span style="color:#4ecca3;font-size:.68rem">used: P[15:0]</span>
+              </div>
+              <div style="background:#0a0a1a;border:1px solid #b97fff;border-radius:4px;padding:6px;margin:3px 0;font-size:.75rem">
+                <span style="color:#b97fff">Pre-adder / PCIN</span><br>
+                <span style="color:#888">correction term</span><br>
+                <span style="color:#555;font-size:.68rem">b[7]? a&lt;&lt;&lt;8 : 0</span>
+              </div>
+            </div>
+          </div>
+          <div class="dsp-internal">
+            <div style="margin-bottom:4px">Internal Operation</div>
+            <div style="color:#4ecca3">P = A × B  (signed × unsigned)</div>
+            <div style="color:#888;font-size:.7rem;margin-top:3px">Correction: +a×256 if b[7]=1</div>
+            <div style="color:#555;font-size:.68rem;margin-top:2px">Mapped to DSP pre-adder or LUT mux</div>
+          </div>
+          <div style="font-size:.72rem;color:#888;margin-top:8px;border-top:1px solid #0f3460;padding-top:6px">
+            <div>Pipeline: MREG=0 (combinational)</div>
+            <div>AREG=0, BREG=0 (direct feed)</div>
+            <div>Range: [-128×255, 127×255] ⊂ 16-bit signed</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RTL code -->
+      <div style="flex:1;min-width:280px">
+        <pre><span class="cm">// booth_mult.v — key sections</span>
+
+<span class="cm">// 1. Booth partial products (generate loop)</span>
+<span class="kw">genvar</span> i;
+<span class="kw">generate</span>
+  <span class="kw">for</span> (i = <span class="num">0</span>; i &lt; <span class="num">8</span>; i = i + <span class="num">1</span>) <span class="kw">begin</span> : gen_pp
+    <span class="kw">wire</span> [<span class="num">1</span>:<span class="num">0</span>] bsel = {ext_b[i+<span class="num">1</span>], ext_b[i]};
+    <span class="kw">assign</span> pp[i] =
+      (bsel == <span class="num">2'b01</span>) ?  (a_ext &lt;&lt;&lt; i) :
+      (bsel == <span class="num">2'b10</span>) ? -(a_ext &lt;&lt;&lt; i) :
+      <span class="num">20'sd0</span>;
+  <span class="kw">end</span>
+<span class="kw">endgenerate</span>
+
+<span class="cm">// 2. Sum of partial products (→ DSP P output)</span>
+<span class="kw">wire signed</span> [<span class="num">19</span>:<span class="num">0</span>] booth_product;
+<span class="kw">assign</span> booth_product =
+  pp[<span class="num">0</span>]+pp[<span class="num">1</span>]+pp[<span class="num">2</span>]+pp[<span class="num">3</span>]
+ +pp[<span class="num">4</span>]+pp[<span class="num">5</span>]+pp[<span class="num">6</span>]+pp[<span class="num">7</span>];
+
+<span class="cm">// 3. Correction for unsigned multiplier</span>
+<span class="kw">wire signed</span> [<span class="num">19</span>:<span class="num">0</span>] correction =
+  b[<span class="num">7</span>] ? (a_ext &lt;&lt;&lt; <span class="num">8</span>) : <span class="num">20'sd0</span>;
+
+<span class="cm">// Vivado inference: recognizes partial product</span>
+<span class="cm">// summation tree as multiply → infers DSP48E2.</span>
+<span class="cm">// The correction mux maps to the DSP pre-adder</span>
+<span class="cm">// or ~8 LUTs surrounding the DSP block.</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">9× DSP48E2 Cascade in conv_layer</div>
+    <div class="scroll-x">
+    <svg width="900" height="180" viewBox="0 0 900 180" style="display:block;margin:0 auto">
+      <rect width="900" height="180" fill="#1a1a2e" rx="6"/>
+      <defs>
+        <marker id="a3" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#e94560"/></marker>
+      </defs>
+      <!-- 9 DSP blocks -->
+      <text x="450" y="18" text-anchor="middle" fill="#888" font-size="9">generate for m=0..8 (booth_macs) instantiates 9 independent booth_mult → 9 DSP48E2 blocks</text>
+      <text x="450" y="168" text-anchor="middle" fill="#888" font-size="9">All 9 operate combinationally in parallel — results summed by adder tree in conv_layer</text>
+
+      <!-- boxes for each DSP -->
+      <rect x="8"   y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="52"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#0</text>
+      <text x="52"  y="65" text-anchor="middle" fill="#888" font-size="8">w[0]×px[0]</text>
+      <text x="52"  y="78" text-anchor="middle" fill="#555" font-size="7">-1 × top-left</text>
+      <text x="52"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[0]</text>
+      <text x="52"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="106"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="150"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#1</text>
+      <text x="150"  y="65" text-anchor="middle" fill="#888" font-size="8">w[1]×px[1]</text>
+      <text x="150"  y="78" text-anchor="middle" fill="#555" font-size="7">0 × top-mid</text>
+      <text x="150"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[1]</text>
+      <text x="150"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="204"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="248"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#2</text>
+      <text x="248"  y="65" text-anchor="middle" fill="#888" font-size="8">w[2]×px[2]</text>
+      <text x="248"  y="78" text-anchor="middle" fill="#555" font-size="7">+1 × top-right</text>
+      <text x="248"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[2]</text>
+      <text x="248"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="302"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="346"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#3</text>
+      <text x="346"  y="65" text-anchor="middle" fill="#888" font-size="8">w[3]×px[3]</text>
+      <text x="346"  y="78" text-anchor="middle" fill="#555" font-size="7">-1 × mid-left</text>
+      <text x="346"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[3]</text>
+      <text x="346"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="400"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="444"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#4</text>
+      <text x="444"  y="65" text-anchor="middle" fill="#888" font-size="8">w[4]×px[4]</text>
+      <text x="444"  y="78" text-anchor="middle" fill="#555" font-size="7">0 × mid-mid</text>
+      <text x="444"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[4]</text>
+      <text x="444"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="498"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="542"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#5</text>
+      <text x="542"  y="65" text-anchor="middle" fill="#888" font-size="8">w[5]×px[5]</text>
+      <text x="542"  y="78" text-anchor="middle" fill="#555" font-size="7">+1 × mid-right</text>
+      <text x="542"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[5]</text>
+      <text x="542"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="596"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="640"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#6</text>
+      <text x="640"  y="65" text-anchor="middle" fill="#888" font-size="8">w[6]×px[6]</text>
+      <text x="640"  y="78" text-anchor="middle" fill="#555" font-size="7">-1 × bot-left</text>
+      <text x="640"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[6]</text>
+      <text x="640"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="694"  y="30" width="88" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="738"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#7</text>
+      <text x="738"  y="65" text-anchor="middle" fill="#888" font-size="8">w[7]×px[7]</text>
+      <text x="738"  y="78" text-anchor="middle" fill="#555" font-size="7">0 × bot-mid</text>
+      <text x="738"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[7]</text>
+      <text x="738"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+
+      <rect x="792"  y="30" width="100" height="120" rx="5" fill="#16213e" stroke="#b97fff" stroke-width="1.5"/>
+      <text x="842"  y="52" text-anchor="middle" fill="#b97fff" font-size="9" font-weight="bold">DSP#8</text>
+      <text x="842"  y="65" text-anchor="middle" fill="#888" font-size="8">w[8]×px[8]</text>
+      <text x="842"  y="78" text-anchor="middle" fill="#555" font-size="7">+1 × bot-right</text>
+      <text x="842"  y="130" text-anchor="middle" fill="#4ecca3" font-size="8">mac[8]</text>
+      <text x="842"  y="142" text-anchor="middle" fill="#888" font-size="7">[15:0]</text>
+    </svg>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Per-Instance Resource Estimate</div>
+    <table>
+      <tr><th>Resource</th><th>Per booth_mult</th><th>×9 total</th><th>Notes</th></tr>
+      <tr><td>DSP48E2</td><td><span class="badge b-red">1</span></td><td><span class="badge b-red">9</span></td><td>Vivado infers from partial product tree</td></tr>
+      <tr><td>LUTs</td><td><span class="badge b-blue">~8</span></td><td><span class="badge b-blue">~72</span></td><td>Correction mux (b[7] conditional add)</td></tr>
+      <tr><td>FFs</td><td><span class="badge b-green">0</span></td><td><span class="badge b-green">0</span></td><td>Purely combinational module</td></tr>
+      <tr><td>BRAM</td><td><span class="badge b-green">0</span></td><td><span class="badge b-green">0</span></td><td>—</td></tr>
+    </table>
+    <div class="note">Vivado recognizes the Booth partial product summation (<code>pp[0]+...+pp[7]</code>) as a multiply-accumulate pattern and infers a single DSP48E2 per instance. The <code>correction</code> term (b[7] conditional shift) is absorbed into the DSP pre-adder stage or implemented as surrounding LUT logic.</div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TAB 4 ═══════════════════════════════ -->
+<div id="t4" class="tab-content">
+  <div class="panel">
+    <div class="panel-title">Module-Level Resource Breakdown</div>
+    <table>
+      <tr><th>Module</th><th>LUTs</th><th>FFs</th><th>DSP48E2</th><th>BRAM36</th></tr>
+      <tr>
+        <td>booth_mult (×9, each)</td>
+        <td><span class="badge b-blue">~8 ea</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-red">1 ea</span></td>
+        <td><span class="badge b-green">0</span></td>
+      </tr>
+      <tr>
+        <td>conv_layer (excl. booth_mult)</td>
+        <td><span class="badge b-blue">~85</span></td>
+        <td><span class="badge b-green">~160</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-green">0</span></td>
+      </tr>
+      <tr>
+        <td>relu</td>
+        <td><span class="badge b-blue">~10</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-green">0</span></td>
+      </tr>
+      <tr>
+        <td>max_pool</td>
+        <td><span class="badge b-blue">~12</span></td>
+        <td><span class="badge b-green">~12</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-green">0</span></td>
+      </tr>
+      <tr>
+        <td>simple_cnn (glue / wires)</td>
+        <td><span class="badge b-blue">~5</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-green">0</span></td>
+        <td><span class="badge b-green">0</span></td>
+      </tr>
+      <tr class="total-row">
+        <td>TOTAL</td>
+        <td>~184</td>
+        <td>~172</td>
+        <td>9</td>
+        <td>0</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">ZCU104 (xczu7ev) Utilization — Percentage Bars</div>
+    <p style="color:#888;font-size:.8rem;margin-bottom:14px">Device capacity: 230,400 LUTs · 460,800 FFs · 1,728 DSP48E2 · 312 BRAM36</p>
+
+    <div class="bar-wrap">
+      <div class="bar-label"><span>LUTs <span class="badge b-blue">~184 / 230,400</span></span><span style="color:#7ecfff;font-weight:700">0.08%</span></div>
+      <div class="bar-track"><div class="bar-fill bar-lut" style="width:0.08%" id="bl">0.08%</div></div>
+    </div>
+
+    <div class="bar-wrap">
+      <div class="bar-label"><span>Flip-Flops <span class="badge b-green">~172 / 460,800</span></span><span style="color:#4ecca3;font-weight:700">0.04%</span></div>
+      <div class="bar-track"><div class="bar-fill bar-ff" style="width:0.04%" id="bff">0.04%</div></div>
+    </div>
+
+    <div class="bar-wrap">
+      <div class="bar-label"><span>DSP48E2 <span class="badge b-red">9 / 1,728</span></span><span style="color:#e94560;font-weight:700">0.52%</span></div>
+      <div class="bar-track"><div class="bar-fill bar-dsp" style="width:0.52%" id="bdsp">0.52%</div></div>
+    </div>
+
+    <div class="bar-wrap">
+      <div class="bar-label"><span>BRAM36 <span class="badge b-green">0 / 312</span></span><span style="color:#f0a040;font-weight:700">0.00%</span></div>
+      <div class="bar-track"><div class="bar-fill bar-bram" style="width:0.01%">0%</div></div>
+    </div>
+
+    <!-- scaled visual bars (×200 for visibility) -->
+    <div style="margin-top:18px;border-top:1px solid #0f3460;padding-top:14px">
+      <p style="color:#888;font-size:.78rem;margin-bottom:10px">Scaled bar chart (×1000 multiplier for visibility — actual utilization is extremely low)</p>
+      <div class="bar-wrap">
+        <div class="bar-label"><span style="color:#7ecfff">LUTs</span></div>
+        <div class="bar-track" style="height:28px"><div class="bar-fill bar-lut" style="width:80px;height:100%"><span>~184</span></div></div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label"><span style="color:#4ecca3">FFs</span></div>
+        <div class="bar-track" style="height:28px"><div class="bar-fill bar-ff" style="width:37px;height:100%"><span>~172</span></div></div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label"><span style="color:#e94560">DSP48E2</span></div>
+        <div class="bar-track" style="height:28px"><div class="bar-fill bar-dsp" style="width:520px;height:100%"><span>9 (highest relative utilization)</span></div></div>
+      </div>
+      <div class="bar-wrap">
+        <div class="bar-label"><span style="color:#f0a040">BRAM36</span></div>
+        <div class="bar-track" style="height:28px"><div class="bar-fill bar-bram" style="width:2px;height:100%"></div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">FF Count Breakdown</div>
+    <table>
+      <tr><th>Register</th><th>Width</th><th>Count</th><th>Purpose</th></tr>
+      <tr><td>delay1[0:7]</td><td>[7:0]</td><td>64 FFs</td><td>1-row line buffer shift register</td></tr>
+      <tr><td>delay2[0:7]</td><td>[7:0]</td><td>64 FFs</td><td>2-row line buffer shift register</td></tr>
+      <tr><td>tap_cur[0:1]</td><td>[7:0]</td><td>16 FFs</td><td>Column taps, current row</td></tr>
+      <tr><td>tap_row1[0:1]</td><td>[7:0]</td><td>16 FFs</td><td>Column taps, 1 row ago</td></tr>
+      <tr><td>tap_row2[0:1]</td><td>[7:0]</td><td>16 FFs (note: some may merge with delay tail)</td><td>Column taps, 2 rows ago</td></tr>
+      <tr><td>feature_map_out</td><td>[15:0]</td><td>16 FFs</td><td>Output register</td></tr>
+      <tr><td>col_cnt</td><td>[3:0]</td><td>4 FFs</td><td>Column counter</td></tr>
+      <tr><td>row_fill</td><td>[1:0]</td><td>2 FFs</td><td>Row fill state</td></tr>
+      <tr><td>rows_full</td><td>1</td><td>1 FF</td><td>Valid gate flag</td></tr>
+      <tr><td>out_valid (conv)</td><td>1</td><td>1 FF</td><td>conv_layer output valid</td></tr>
+      <tr><td>max_val</td><td>[7:0]</td><td>8 FFs</td><td>max_pool running max</td></tr>
+      <tr><td>count_r</td><td>[1:0]</td><td>2 FFs</td><td>max_pool window counter</td></tr>
+      <tr><td>pooled_out</td><td>[7:0]</td><td>8 FFs</td><td>max_pool output register</td></tr>
+      <tr><td>out_valid (pool)</td><td>1</td><td>1 FF</td><td>max_pool output valid</td></tr>
+      <tr class="total-row"><td>TOTAL</td><td>—</td><td>~179 FFs</td><td>(Vivado may merge/optimize some)</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TAB 5 ═══════════════════════════════ -->
+<div id="t5" class="tab-content">
+  <div class="panel">
+    <div class="panel-title">Critical Path — 100 MHz Timing Analysis (10 ns budget)</div>
+
+    <div style="margin-bottom:14px;font-size:.82rem;color:#888">
+      Worst-case combinational path: pixel_in register → delay FF → tap mux → booth_mult (DSP) → adder tree → saturator → feature_map_out D-pin setup
+    </div>
+
+    <!-- Stage bars -->
+    <div style="position:relative">
+
+      <div class="cp-stage">
+        <div class="cp-label">① pixel_in → delay1 FF Q</div>
+        <div class="cp-bar-wrap">
+          <div class="cp-bar" style="width:50px;background:linear-gradient(90deg,#0f3460,#4a8fff)">0.5 ns</div>
+          <span class="cp-ns">FF clock-to-Q propagation + routing</span>
+        </div>
+      </div>
+
+      <div class="cp-stage">
+        <div class="cp-label">② delay tail → tap_row mux</div>
+        <div class="cp-bar-wrap">
+          <div class="cp-bar" style="width:30px;background:linear-gradient(90deg,#103d1a,#4ecca3)">0.3 ns</div>
+          <span class="cp-ns">Mux select + routing to booth_mult B input</span>
+        </div>
+      </div>
+
+      <div class="cp-stage">
+        <div class="cp-label">③ booth_mult combinational (DSP48E2)</div>
+        <div class="cp-bar-wrap">
+          <div class="cp-bar" style="width:320px;background:linear-gradient(90deg,#3d0a17,#e94560)">3.2 ns</div>
+          <span class="cp-ns">Booth partial products + DSP48E2 multiply + correction mux</span>
+        </div>
+      </div>
+
+      <div class="cp-stage">
+        <div class="cp-label">④ 9-input adder tree (3 levels)</div>
+        <div class="cp-bar-wrap">
+          <div class="cp-bar" style="width:210px;background:linear-gradient(90deg,#2e2a0a,#f0c040)">2.1 ns</div>
+          <span class="cp-ns">3-level carry-chain LUT6 adder tree (20-bit)</span>
+        </div>
+      </div>
+
+      <div class="cp-stage">
+        <div class="cp-label">⑤ Saturator comparator + mux</div>
+        <div class="cp-bar-wrap">
+          <div class="cp-bar" style="width:80px;background:linear-gradient(90deg,#1e0a3d,#b97fff)">0.8 ns</div>
+          <span class="cp-ns">2× 20-bit signed comparators + 2-way mux (LUT chain)</span>
+        </div>
+      </div>
+
+      <div class="cp-stage">
+        <div class="cp-label">⑥ Output FF D setup time</div>
+        <div class="cp-bar-wrap">
+          <div class="cp-bar" style="width:10px;background:linear-gradient(90deg,#1a2e0a,#88cc44)">0.1 ns</div>
+          <span class="cp-ns">FF setup time (feature_map_out)</span>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Total summary -->
+    <div class="cp-total" style="margin-top:16px">
+      <div>
+        <div style="color:#aaa;font-size:.82rem;margin-bottom:4px">Total Estimated Critical Path</div>
+        <div class="big">~7.0 ns</div>
+        <div style="color:#888;font-size:.78rem">0.5 + 0.3 + 3.2 + 2.1 + 0.8 + 0.1</div>
+      </div>
+      <div style="text-align:center">
+        <div style="color:#aaa;font-size:.82rem;margin-bottom:4px">Clock Period</div>
+        <div class="big">10.0 ns</div>
+        <div style="color:#888;font-size:.78rem">100 MHz target</div>
+      </div>
+      <div style="text-align:right">
+        <div style="color:#aaa;font-size:.82rem;margin-bottom:4px">Setup Slack</div>
+        <div class="big" style="color:#4ecca3">+3.0 ns</div>
+        <div class="slack">TIMING MET ✓</div>
+      </div>
+    </div>
+
+    <!-- Pipeline diagram -->
+    <div style="margin-top:24px">
+      <div class="panel-title" style="border:none;padding-bottom:0;margin-bottom:8px">Horizontal Pipeline Stage Diagram</div>
+      <div class="scroll-x">
+      <svg width="860" height="130" viewBox="0 0 860 130" style="display:block;margin:0 auto">
+        <rect width="860" height="130" fill="#1a1a2e" rx="6"/>
+        <defs>
+          <marker id="a5" markerWidth="7" markerHeight="5" refX="7" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#7ecfff"/></marker>
+        </defs>
+
+        <!-- Timeline bar -->
+        <rect x="20" y="55" width="820" height="36" rx="4" fill="#0a0a1a" stroke="#0f3460" stroke-width="1"/>
+
+        <!-- Segments -->
+        <!-- ① 0.5ns → 41px/ns scale ~ 5px -->
+        <rect x="20"  y="55" width="41"  height="36" rx="0" fill="#0f3460" stroke="#4a8fff" stroke-width="1"/>
+        <text x="40"  y="76" text-anchor="middle" fill="#7ecfff" font-size="8">① 0.5ns</text>
+
+        <!-- ② 0.3ns -->
+        <rect x="61"  y="55" width="25"  height="36" fill="#103d1a" stroke="#4ecca3" stroke-width="1"/>
+        <text x="73"  y="76" text-anchor="middle" fill="#4ecca3" font-size="7">② 0.3</text>
+
+        <!-- ③ 3.2ns (longest — DSP) -->
+        <rect x="86"  y="55" width="262" height="36" fill="#3d0a17" stroke="#e94560" stroke-width="2"/>
+        <text x="217" y="72" text-anchor="middle" fill="#e94560" font-size="9" font-weight="bold">③ DSP48E2  3.2 ns</text>
+        <text x="217" y="84" text-anchor="middle" fill="#888" font-size="8">(booth_mult — dominant)</text>
+
+        <!-- ④ 2.1ns adder tree -->
+        <rect x="348" y="55" width="172" height="36" fill="#2e2a0a" stroke="#f0c040" stroke-width="1.5"/>
+        <text x="434" y="72" text-anchor="middle" fill="#f0c040" font-size="9" font-weight="bold">④ adder tree  2.1 ns</text>
+        <text x="434" y="84" text-anchor="middle" fill="#888" font-size="8">carry-chain LUTs</text>
+
+        <!-- ⑤ 0.8ns saturator -->
+        <rect x="520" y="55" width="66"  height="36" fill="#1e0a3d" stroke="#b97fff" stroke-width="1.5"/>
+        <text x="553" y="72" text-anchor="middle" fill="#b97fff" font-size="8">⑤ sat</text>
+        <text x="553" y="83" text-anchor="middle" fill="#888" font-size="7">0.8 ns</text>
+
+        <!-- ⑥ 0.1ns setup -->
+        <rect x="586" y="55" width="8"   height="36" fill="#1a2e0a" stroke="#88cc44" stroke-width="1"/>
+
+        <!-- slack region -->
+        <rect x="594" y="55" width="246" height="36" fill="#0a0a0a" stroke="#333" stroke-width="1" stroke-dasharray="4,3"/>
+        <text x="717" y="76" text-anchor="middle" fill="#4ecca3" font-size="10" font-weight="bold">SLACK  +3.0 ns</text>
+
+        <!-- clock period marker -->
+        <line x1="840" y1="45" x2="840" y2="100" stroke="#f0c040" stroke-width="1.5" stroke-dasharray="3,3"/>
+        <text x="840" y="42" text-anchor="middle" fill="#f0c040" font-size="9">10 ns (clk)</text>
+
+        <!-- time axis -->
+        <line x1="20" y1="100" x2="840" y2="100" stroke="#555" stroke-width="1" marker-end="url(#a5)"/>
+        <text x="20"  y="115" fill="#888" font-size="8">0 ns</text>
+        <text x="430" y="115" text-anchor="middle" fill="#888" font-size="8">5 ns</text>
+        <text x="594" y="115" fill="#888" font-size="8">7.0 ns</text>
+        <text x="840" y="115" text-anchor="middle" fill="#888" font-size="8">10 ns</text>
+        <line x1="430" y1="98" x2="430" y2="103" stroke="#555" stroke-width="1"/>
+        <line x1="594" y1="98" x2="594" y2="103" stroke="#4ecca3" stroke-width="1"/>
+      </svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Path Details by Stage</div>
+    <table>
+      <tr><th>#</th><th>Stage</th><th>Delay</th><th>Resource</th><th>Cumulative</th></tr>
+      <tr><td>①</td><td>pixel_in FF Q → net → delay1 shift</td><td>0.5 ns</td><td>FDRE Q pin + routing</td><td>0.5 ns</td></tr>
+      <tr><td>②</td><td>delay1[7] → tap_row1[1] mux → booth_mult B</td><td>0.3 ns</td><td>2:1 mux (LUT) + routing</td><td>0.8 ns</td></tr>
+      <tr><td>③</td><td>DSP48E2 A×B combinational path</td><td>3.2 ns</td><td>DSP48E2 (xczu7ev: tMULT ≈ 3.0–3.5 ns)</td><td>4.0 ns</td></tr>
+      <tr><td>④</td><td>9×16-bit → 20-bit adder tree (3 levels)</td><td>2.1 ns</td><td>CARRY8 + LUT6 chain</td><td>6.1 ns</td></tr>
+      <tr><td>⑤</td><td>Saturator: 2× signed compare + mux</td><td>0.8 ns</td><td>LUT6 chain (20-bit comparator)</td><td>6.9 ns</td></tr>
+      <tr><td>⑥</td><td>feature_map_out FF D setup</td><td>0.1 ns</td><td>FDRE setup time</td><td>7.0 ns</td></tr>
+      <tr class="total-row"><td></td><td>Total path / budget</td><td><strong>7.0 ns</strong></td><td></td><td>Slack: +3.0 ns ✓</td></tr>
+    </table>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TAB 6 ═══════════════════════════════ -->
+<div id="t6" class="tab-content">
+  <div class="panel">
+    <div class="panel-title">Synthesis Inference Summary — RTL Construct → Vivado Primitive</div>
+    <div class="scroll-x">
+    <table>
+      <tr><th>RTL Construct</th><th>Location</th><th>Synthesis Inference</th></tr>
+      <tr>
+        <td><code style="color:#f0c040">generate for pp[0..7]</code> (20-bit signed multiply)</td>
+        <td><span class="badge b-purple">booth_mult</span></td>
+        <td>ONE <span class="badge b-red">DSP48E2</span> per instance — multiply-accumulate pattern recognized</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">integer j</code> for-loop in reset block</td>
+        <td><span class="badge b-blue">conv_layer</span></td>
+        <td>Unrolled to <span class="badge b-green">16 parallel FF resets</span> — no counter inferred (static bound)</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">reg [7:0] delay1/delay2 [0:IMAGE_WIDTH-1]</code></td>
+        <td><span class="badge b-blue">conv_layer</span></td>
+        <td>16× 8-bit shift registers → <span class="badge b-green">SRL16E</span> or FDRE FFs (tool-dependent); Vivado prefers FDRE for small depths</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">reg [7:0] tap_cur/row1/row2 [0:1]</code></td>
+        <td><span class="badge b-blue">conv_layer</span></td>
+        <td>6× 8-bit registers → <span class="badge b-green">48 FDRE FFs</span> with explicit D/Q routing</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">$signed comparison</code> in sat_val assign</td>
+        <td><span class="badge b-blue">conv_layer</span></td>
+        <td>2× 20-bit signed comparators → <span class="badge b-blue">LUT6 carry-chain</span> (approx. 20 LUTs total for both compares + mux)</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">always @(in)</code> combinational block</td>
+        <td><span class="badge b-green">relu</span></td>
+        <td>Pure <span class="badge b-blue">LUT logic</span>: sign-bit check + OR reduction + mux → ~2× LUT6 + routing</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">reg [1:0] count_r</code></td>
+        <td><span class="badge b-red">max_pool</span></td>
+        <td>2-bit binary counter → <span class="badge b-green">2 FDRE FFs</span> + 1 LUT (increment + wrap logic)</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">reg [7:0] max_val</code> with unsigned compare</td>
+        <td><span class="badge b-red">max_pool</span></td>
+        <td>8× FDRE FFs with unsigned 8-bit comparator → <span class="badge b-blue">8 LUT6s</span> (one per bit, carry-chain compare)</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">wire [71:0] weights = {...}</code> constant</td>
+        <td><span class="badge b-purple">simple_cnn</span></td>
+        <td>Constant propagated — <span class="badge b-green">no logic</span>, directly wired to conv_layer weight inputs; Vivado folds into DSP A-port constants</td>
+      </tr>
+      <tr>
+        <td><code style="color:#f0c040">wire relu_valid = conv_valid</code></td>
+        <td><span class="badge b-purple">simple_cnn</span></td>
+        <td>Direct wire alias — <span class="badge b-green">0 LUTs</span>, net merged by optimizer</td>
+      </tr>
+    </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Vivado Flatten / Optimize Note</div>
+    <div class="warn">
+      <strong>Vivado 2023.1</strong> with <code>-flatten_hierarchy rebuilt</code> will merge <code>booth_mult</code> into <code>conv_layer</code> and optimize the partial product tree into <strong>9 DSP48E2 cascade chains</strong>. The correction term (b[7] branch) may be fully absorbed into the DSP48E2 pre-adder (D input path), eliminating the surrounding LUTs and reducing the total LUT count from ~184 to approximately ~112.
+    </div>
+    <div class="note">
+      With <code>-flatten_hierarchy full</code>, Vivado may additionally recognize that weights w[1], w[4], w[7] = 0 (zero multiplications) and eliminate DSP#1, DSP#4, DSP#7 entirely, reducing DSP count from 9 to <strong>6 DSP48E2</strong> for the Sobel kernel specifically.
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Key RTL Code Snippets</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div>
+        <p style="color:#4ecca3;font-size:.82rem;margin-bottom:6px;font-weight:700">relu.v — Combinational Block</p>
+        <pre><span class="kw">always</span> @(<span class="sig">in</span>) <span class="kw">begin</span>
+  <span class="kw">if</span> (<span class="sig">in</span>[<span class="num">15</span>])
+    <span class="sig">out</span> = <span class="num">8'd0</span>;
+  <span class="kw">else if</span> (|<span class="sig">in</span>[<span class="num">15</span>:<span class="num">8</span>])
+    <span class="sig">out</span> = <span class="num">8'd255</span>;
+  <span class="kw">else</span>
+    <span class="sig">out</span> = <span class="sig">in</span>[<span class="num">7</span>:<span class="num">0</span>];
+<span class="kw">end</span>
+<span class="cm">// → ~2 LUT6, no FFs</span></pre>
+      </div>
+      <div>
+        <p style="color:#e94560;font-size:.82rem;margin-bottom:6px;font-weight:700">max_pool.v — Registered Counter</p>
+        <pre><span class="kw">reg</span> [<span class="num">1</span>:<span class="num">0</span>] count_r;
+<span class="kw">if</span> (count_r == <span class="num">2'd3</span>) <span class="kw">begin</span>
+  pooled_out <= max_result;
+  out_valid  <= <span class="num">1'b1</span>;
+  max_val    <= <span class="num">8'd0</span>;
+  count_r    <= <span class="num">2'd0</span>;
+<span class="kw">end else begin</span>
+  out_valid <= <span class="num">1'b0</span>;
+  count_r   <= count_r + <span class="num">2'd1</span>;
+<span class="kw">end</span>
+<span class="cm">// → 2 FDRE + 1 LUT6</span></pre>
+      </div>
+      <div>
+        <p style="color:#b97fff;font-size:.82rem;margin-bottom:6px;font-weight:700">conv_layer.v — Saturator</p>
+        <pre><span class="kw">wire signed</span> [<span class="num">15</span>:<span class="num">0</span>] sat_val;
+<span class="kw">assign</span> sat_val =
+  (sum > <span class="num">20'sh07FFF</span>) ? <span class="num">16'sh7FFF</span> :
+  (sum &lt; <span class="num">20'shF8000</span>) ? <span class="num">16'sh8000</span> :
+  sum[<span class="num">15</span>:<span class="num">0</span>];
+<span class="cm">// → 2× 20-bit comparators</span>
+<span class="cm">//   + 2-way mux (LUT chain)</span></pre>
+      </div>
+      <div>
+        <p style="color:#f0c040;font-size:.82rem;margin-bottom:6px;font-weight:700">conv_layer.v — Line Buffer Reset</p>
+        <pre><span class="kw">integer</span> j;
+<span class="kw">for</span> (j=<span class="num">0</span>; j &lt; IMAGE_WIDTH; j=j+<span class="num">1</span>)
+<span class="kw">begin</span>
+  delay1[j] <= <span class="num">8'd0</span>;
+  delay2[j] <= <span class="num">8'd0</span>;
+<span class="kw">end</span>
+<span class="cm">// → Unrolled: 16 parallel</span>
+<span class="cm">//   FF reset connections</span>
+<span class="cm">//   (no counter synthesized)</span></pre>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div class="panel-title">Quick Reference — Module Hierarchy</div>
+    <pre><span class="mod">simple_cnn</span>                          <span class="cm">// top.v — wire glue, constant weights</span>
+├── <span class="mod">conv_layer</span> #(IMAGE_WIDTH=8, FILTER_SIZE=3)  <span class="cm">// layers/conv_layer.v</span>
+│   ├── <span class="sig">delay1[0:7]</span>               <span class="cm">// 8× 8-bit FFs (line buffer row-1)</span>
+│   ├── <span class="sig">delay2[0:7]</span>               <span class="cm">// 8× 8-bit FFs (line buffer row-2)</span>
+│   ├── <span class="sig">tap_cur/row1/row2[0:1]</span>    <span class="cm">// 6× 8-bit FFs (column taps)</span>
+│   ├── <span class="mod">booth_macs[0]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #0</span>
+│   ├── <span class="mod">booth_macs[1]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #1 (w=0 → may be removed)</span>
+│   ├── <span class="mod">booth_macs[2]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #2</span>
+│   ├── <span class="mod">booth_macs[3]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #3</span>
+│   ├── <span class="mod">booth_macs[4]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #4 (w=0 → may be removed)</span>
+│   ├── <span class="mod">booth_macs[5]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #5</span>
+│   ├── <span class="mod">booth_macs[6]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #6</span>
+│   ├── <span class="mod">booth_macs[7]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #7 (w=0 → may be removed)</span>
+│   ├── <span class="mod">booth_macs[8]</span> <span class="sig">booth_mult</span>  <span class="cm">// → DSP48E2 #8</span>
+│   ├── <span class="cm">adder tree</span>                <span class="cm">// 9×[15:0] → [19:0], CARRY8 + LUT6</span>
+│   └── <span class="cm">saturator + output FF</span>     <span class="cm">// LUT chain + FDRE×16</span>
+├── <span class="mod">relu_inst</span> <span class="sig">relu</span>                 <span class="cm">// core/relu.v — pure LUT logic</span>
+└── <span class="mod">maxpool_inst</span> <span class="sig">max_pool</span>          <span class="cm">// core/max_pool.v — FFs + comparator</span></pre>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ JAVASCRIPT ═══════════════════════════════ -->
+<script>
+function showTab(id, btn) {
+  document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  btn.classList.add('active');
+}
+
+// Animate bars on load
+window.addEventListener('load', function() {
+  // The percentage bars are set inline via style already.
+  // Animate the scaled bars with a small delay for polish.
+  setTimeout(function() {
+    var fills = document.querySelectorAll('.bar-fill');
+    fills.forEach(function(f) {
+      var w = f.style.width;
+      f.style.width = '0';
+      setTimeout(function() { f.style.width = w; }, 100);
+    });
+  }, 200);
+});
+</script>
+
+</body>
+</html>

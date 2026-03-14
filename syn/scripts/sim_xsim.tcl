@@ -2,7 +2,7 @@
 # Run simple_cnn testbench using Vivado xsim (no iverilog needed).
 #
 # Usage from project root:
-#   C:/Xilinx/Vivado/2023.1/bin/vivado.bat -mode batch -source syn/scripts/sim_xsim.tcl
+#   E:/Xilinx/2025.2/Vivado/bin/vivado.bat -mode batch -source syn/scripts/sim_xsim.tcl
 #
 # Outputs:
 #   sim/xsim_simple_cnn.log   — simulation transcript

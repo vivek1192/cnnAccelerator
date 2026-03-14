@@ -17,7 +17,7 @@
 #   docs/          documentation
 # =============================================================================
 
-VIVADO   := C:/Xilinx/Vivado/2023.1/bin/vivado.bat
+VIVADO   := E:/Xilinx/2025.2/Vivado/bin/vivado.bat
 IVERILOG := iverilog
 VVP      := vvp
 

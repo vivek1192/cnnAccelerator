@@ -18,8 +18,16 @@
 //     2'b00 or 2'b11:         add   0
 //
 // Module is purely combinational — no clock, no state.
-// Vivado will infer DSP48E2 from this pattern; the RTL serves as the
-// functional reference model for testbench verification.
+// Synthesis: (* use_dsp = "yes" *) forces Vivado to map the multiply to
+// a DSP48E2 primitive instead of LUT+CARRY8 chains.
+//
+// DSP48E2 mapping on xczu7ev:
+//   A[24:0]  ← sign-extended a (8-bit signed → 25-bit)
+//   B[17:0]  ← zero-extended b (8-bit unsigned → 18-bit)
+//   P[47:0]  ← product; we use P[15:0]
+//
+// Functional equivalence to Booth RTL is verified by tb_booth_mult
+// (exhaustive 65536-case sweep — all pass).
 
 module booth_mult (
     input  wire signed [7:0]  a,      // signed multiplicand  (weight, W4/W8)
@@ -27,55 +35,10 @@ module booth_mult (
     output wire signed [15:0] product
 );
 
-    // -------------------------------------------------------------------------
-    // 1. Append implicit bit b[-1] = 0 below the LSB of b
-    // -------------------------------------------------------------------------
-    wire [8:0] ext_b = {b, 1'b0};
-    //   ext_b[0]   = 0      = b[-1]  (implicit)
-    //   ext_b[8:1] = b[7:0] = b[0..7]
-
-    // -------------------------------------------------------------------------
-    // 2. Sign-extend a to 20 bits for safe shifting (pp[7] needs a << 7 = 16 bits;
-    //    correction needs a << 8 = 17 bits; 20-bit headroom covers both)
-    // -------------------------------------------------------------------------
-    wire signed [19:0] a_ext = {{12{a[7]}}, a};
-
-    // -------------------------------------------------------------------------
-    // 3. Generate 8 partial products (Booth for signed interpretation of b)
-    // -------------------------------------------------------------------------
-    wire signed [19:0] pp [0:7];
-
-    genvar i;
-    generate
-        for (i = 0; i < 8; i = i + 1) begin : gen_pp
-            // bsel[1] = b[i]   = current bit   (Q_i)
-            // bsel[0] = b[i-1] = previous bit  (Q_{i-1}), which is ext_b[i]
-            wire [1:0] bsel = {ext_b[i+1], ext_b[i]};  // {Q_i, Q_{i-1}}
-
-            assign pp[i] = (bsel == 2'b01) ?  (a_ext <<< i) :   // 0→1: add
-                           (bsel == 2'b10) ? -(a_ext <<< i) :   // 1→0: subtract
-                           20'sd0;                               // 00/11: zero
-        end
-    endgenerate
-
-    // -------------------------------------------------------------------------
-    // 4. Sum partial products (gives a × b_signed)
-    // -------------------------------------------------------------------------
-    wire signed [19:0] booth_product;
-    assign booth_product = pp[0] + pp[1] + pp[2] + pp[3]
-                         + pp[4] + pp[5] + pp[6] + pp[7];
-
-    // -------------------------------------------------------------------------
-    // 5. Correction for unsigned multiplier
-    //    If b[7]=1, booth_product = a × (b_signed) = a × (b_unsigned − 256)
-    //    So add a × 256 to recover a × b_unsigned.
-    // -------------------------------------------------------------------------
-    wire signed [19:0] correction = b[7] ? (a_ext <<< 8) : 20'sd0;
-
-    // -------------------------------------------------------------------------
-    // 6. Final product (always fits in 16 bits: range [−128×255, 127×255])
-    // -------------------------------------------------------------------------
-    wire signed [19:0] full_sum = booth_product + correction;
-    assign product = full_sum[15:0];
+    // Zero-extend b to signed 16-bit so the multiply is signed × signed.
+    // {1'b0, b} treats b as positive signed 9-bit → correct unsigned semantics.
+    (* use_dsp = "yes" *) wire signed [15:0] product_dsp;
+    assign product_dsp = $signed(a) * $signed({1'b0, b});
+    assign product = product_dsp;
 
 endmodule

@@ -13,3 +13,11 @@ set_property IOSTANDARD  LVCMOS18   [get_ports rst_n]
 
 # False-path the async reset input to avoid timing exceptions
 set_false_path -from [get_ports rst_n]
+
+# ── Data I/O IOSTANDARD (pin LOC assigned in impl_cnn.tcl via Pin Planner) ──
+# For prototype bitstream, DRC waivers are set in the impl script.
+# For board bring-up, assign actual ZCU104 PMOD pins here.
+set_property IOSTANDARD LVCMOS18 [get_ports {pixel_in[*]}]
+set_property IOSTANDARD LVCMOS18 [get_ports pixel_valid]
+set_property IOSTANDARD LVCMOS18 [get_ports {pooled_out[*]}]
+set_property IOSTANDARD LVCMOS18 [get_ports pool_valid]

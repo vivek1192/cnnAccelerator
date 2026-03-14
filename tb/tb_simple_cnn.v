@@ -132,13 +132,15 @@ module simple_cnn_tb;
             end
         end
 
-        // CHECK 2: first pooled output (left flat region) must be 0
-        if (pool_out_idx > 0) begin
-            if (pool_results[0] == 8'd0) begin
-                $display("PASS: pool_results[0] = 0 (left flat region correct).");
+        // CHECK 2: pool_results[1] must be 0 (the flat post-edge window).
+        // pool[0] = max(col0,col1,col2,col3) = max(0,0,255,255) = 255  ← edge included
+        // pool[1] = max(col4,col5,row3_col0,row3_col1) = max(0,0,0,0) = 0  ← flat region
+        if (pool_out_idx > 1) begin
+            if (pool_results[1] == 8'd0) begin
+                $display("PASS: pool_results[1] = 0 (post-edge flat region correct).");
                 pass_cnt = pass_cnt + 1;
             end else begin
-                $display("FAIL: pool_results[0] = %0d (expected 0).", pool_results[0]);
+                $display("FAIL: pool_results[1] = %0d (expected 0).", pool_results[1]);
                 fail_cnt = fail_cnt + 1;
             end
         end

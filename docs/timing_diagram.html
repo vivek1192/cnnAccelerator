@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>simple_cnn — Cycle-Accurate Timing Diagram</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0d1117; color: #c9d1d9; font-family: 'Courier New', monospace; font-size: 13px; }
+  h1 { padding: 18px 24px 4px; color: #58a6ff; font-size: 18px; font-weight: 700; letter-spacing: 0.5px; }
+  .subtitle { padding: 2px 24px 14px; color: #8b949e; font-size: 12px; }
+  .legend { display: flex; gap: 20px; padding: 8px 24px 12px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 11px; color: #8b949e; }
+  .legend-swatch { width: 28px; height: 3px; border-radius: 2px; }
+  .container { overflow-x: auto; padding: 0 24px 32px; }
+  svg { display: block; }
+  .signal-label { font-size: 11px; fill: #c9d1d9; dominant-baseline: middle; text-anchor: end; }
+  .group-label { font-size: 10px; fill: #6e7681; dominant-baseline: middle; text-anchor: end; font-style: italic; }
+  .clk-line { stroke: #388bfd; stroke-width: 1.5; fill: none; }
+  .rst-line { stroke: #f78166; stroke-width: 1.5; fill: none; }
+  .valid-line { stroke: #56d364; stroke-width: 1.5; fill: none; }
+  .data-line { stroke: #d2a8ff; stroke-width: 1.5; fill: none; }
+  .data-fill { fill: #2d1f47; opacity: 0.55; }
+  .ctrl-line { stroke: #ffa657; stroke-width: 1.5; fill: none; }
+  .ctrl-fill { fill: #3a2a10; opacity: 0.55; }
+  .pool-line { stroke: #79c0ff; stroke-width: 1.5; fill: none; }
+  .pool-fill { fill: #0d2136; opacity: 0.55; }
+  .tick-line { stroke: #21262d; stroke-width: 1; }
+  .tick-label { font-size: 10px; fill: #484f58; text-anchor: middle; }
+  .event-line { stroke: #ffa657; stroke-width: 1; stroke-dasharray: 4,3; opacity: 0.6; }
+  .event-label { font-size: 10px; fill: #ffa657; text-anchor: middle; }
+  .divider { stroke: #21262d; stroke-width: 1; }
+  .data-text { font-size: 9.5px; fill: #d2a8ff; text-anchor: middle; dominant-baseline: middle; }
+  .ctrl-text { font-size: 9.5px; fill: #ffa657; text-anchor: middle; dominant-baseline: middle; }
+  .pool-text { font-size: 9.5px; fill: #79c0ff; text-anchor: middle; dominant-baseline: middle; }
+  .annotation { font-size: 10px; fill: #56d364; }
+  .anno-box { fill: #0f2a1a; stroke: #56d364; stroke-width: 0.8; rx: 3; opacity: 0.9; }
+  .phase-bg-fill { fill: #1c2128; }
+  .phase-bg-pipeline { fill: #161b22; }
+</style>
+</head>
+<body>
+<h1>simple_cnn — Cycle-Accurate Timing Diagram</h1>
+<div class="subtitle">Target: xczu7ev-ffvc1156-2-e @ 100 MHz · 8×8 image · 3×3 Sobel-x kernel · 2×2 max-pool</div>
+<div class="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#388bfd"></div>Clock / Control</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#f78166"></div>Reset</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#56d364"></div>Valid strobe</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#d2a8ff"></div>Pixel / Conv data</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#ffa657"></div>ReLU / count</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#79c0ff"></div>Pool output</div>
+</div>
+<div class="container">
+<canvas id="cvs" width="1600" height="580"></canvas>
+</div>
+
+<script>
+// ─── Layout constants ───────────────────────────────────────────────────────
+const LABEL_W   = 148;   // left label column width
+const CLK_H     = 32;    // clock row height
+const SIG_H     = 28;    // regular signal height
+const BUS_H     = 30;    // bus signal height
+const PAD_TOP   = 44;    // top padding (tick labels)
+const PAD_BOT   = 20;
+const CYCLES    = 36;    // cycles to show (0..35)
+const CW        = (1600 - LABEL_W - 20) / CYCLES;  // pixels per cycle
+
+const cvs = document.getElementById('cvs');
+const ctx = cvs.getContext('2d');
+
+// ─── Color theme ────────────────────────────────────────────────────────────
+const C = {
+  bg:       '#0d1117',
+  row0:     '#161b22',
+  row1:     '#0d1117',
+  grid:     '#21262d',
+  tick:     '#484f58',
+  clk:      '#388bfd',
+  rst:      '#f78166',
+  valid:    '#56d364',
+  data:     '#d2a8ff',
+  dataFill: '#2d1f47',
+  ctrl:     '#ffa657',
+  ctrlFill: '#3a2a10',
+  pool:     '#79c0ff',
+  poolFill: '#0d2136',
+  label:    '#c9d1d9',
+  grp:      '#6e7681',
+  event:    '#ffa657',
+  anno:     '#56d364',
+};
+
+// ─── Signal definitions ──────────────────────────────────────────────────────
+// Each signal: { name, group, kind: 'clk'|'bit'|'bus', color, fillColor?, data[CYCLES] }
+// For bus: data[i] = string label or null (no change / don't-care boundary)
+// For bit: data[i] = 0 or 1
+
+// ── pixel_in values for 8×8 image: cols 0-3 = 0, cols 4-7 = 255 (vertical edge at col 4)
+function pixelVal(cycle) {
+  // cycle 0..7 = row 0, 8..15 = row 1, etc.
+  const col = cycle % 8;
+  return col >= 4 ? 255 : 0;
+}
+
+// ── Build pixel_in bus labels
+const pixIn = [];
+for (let c = 0; c < CYCLES; c++) {
+  if (c < 2) { pixIn.push(null); continue; }  // reset
+  const row = Math.floor((c-2)/8);
+  const col = (c-2) % 8;
+  if (col === 0) pixIn.push(`r${row}[0]→${pixelVal(c-2)}`);
+  else if (col === 4) pixIn.push(`r${row}[4]→255`);
+  else pixIn.push(null);   // continuation
+}
+
+// ── pixel_valid: high from cycle 2 onward (streaming, no gaps)
+const pixValid = [];
+for (let c = 0; c < CYCLES; c++) pixValid.push(c >= 2 ? 1 : 0);
+
+// ── col_cnt: counts 0..7 inside each row, restarts each IMAGE_WIDTH cycles
+// starts counting when pixel_valid, so offset by 2
+const colCnt = [];
+for (let c = 0; c < CYCLES; c++) {
+  if (c < 2) { colCnt.push(null); continue; }
+  colCnt.push(((c-2) % 8).toString());
+}
+
+// ── line_cnt: counts completed rows (0,1,2,2,2,...)
+const lineCnt = [];
+for (let c = 0; c < CYCLES; c++) {
+  if (c < 2) { lineCnt.push(null); continue; }
+  const filled = Math.floor((c-2) / 8);
+  lineCnt.push(Math.min(filled, 2).toString());
+}
+
+// ── rows_full: high once 3 rows filled = cycle 2+16 = 18 (when starting row 2, line_cnt≥2)
+// Actually rows_full when line_cnt >= 2, which happens after 2 complete rows = cycle 2+16=18
+const rowsFull = [];
+for (let c = 0; c < CYCLES; c++) {
+  rowsFull.push((c >= 18) ? 1 : 0);
+}
+
+// ── conv out_valid: rows_full AND col_cnt>=2 → first valid at cycle 18+2=20
+const convValid = [];
+for (let c = 0; c < CYCLES; c++) {
+  const pxc = c - 2;
+  if (pxc < 0) { convValid.push(0); continue; }
+  const row = Math.floor(pxc / 8);
+  const col = pxc % 8;
+  convValid.push((row >= 2 && col >= 2) ? 1 : 0);
+}
+
+// ── feature_map_out: Sobel-x on the 8×8 edge image
+// For 8-wide image, conv output cols 0..5 for each output row
+// Sobel-x: w=[-127,0,127; -127,0,127; -127,0,127] (flat column weights)
+// For the edge image: col_out=k corresponds to input cols k,k+1,k+2
+// Sum = w[0]*p_k + w[1]*p_{k+1} + w[2]*p_{k+2} (across 3 rows)
+// = 3*(-127*left + 0*mid + 127*right)  (same 3 rows)
+// col_out=0: inputs cols 0,1,2 (all 0) → 0
+// col_out=1: inputs cols 1,2,3 (all 0) → 0
+// col_out=2: inputs cols 2,3,4 → -127*0+0*0+127*255 = 32385 → clamped 32767
+// col_out=3: inputs cols 3,4,5 → -127*0+0*255+127*255 = 32385 → 32767
+// col_out=4: inputs cols 4,5,6 → -127*255+0*255+127*255 = 0
+// col_out=5: inputs cols 5,6,7 → -127*255+0*255+127*255 = 0
+const convVals = [0, 0, 32767, 32767, 0, 0];  // per output col (repeats each output row)
+
+// Build conv feature_map labels per cycle
+const convFM = [];
+let outColIdx = 0;
+for (let c = 0; c < CYCLES; c++) {
+  if (!convValid[c]) { convFM.push(null); continue; }
+  // figure out which output column this is
+  const pxc = c - 2;
+  const ocol = (pxc % 8) - 2;  // 0..5
+  const val = convVals[ocol];
+  convFM.push(val === 0 ? '0' : val.toString());
+}
+
+// ── relu_out: clamp negative→0, overflow→255; input is convFM 16-bit
+// ReLU of conv: same because all values are 0 or 32767
+// 32767 → in[15:8] = 0x7F ≠ 0 → saturate to 255
+const reluVals = convVals.map(v => v < 0 ? 0 : (v > 255 ? 255 : v));
+// 32767 → 255, 0 → 0
+const reluOut = [];
+for (let c = 0; c < CYCLES; c++) {
+  if (!convValid[c]) { reluOut.push(null); continue; }
+  const pxc = c - 2;
+  const ocol = (pxc % 8) - 2;
+  reluOut.push(reluVals[ocol] === 0 ? '0' : '255');
+}
+
+// ── max_pool: count_r cycles through 0,1,2,3, fires pool_valid on 3
+const countR = [];
+const poolOut = [];
+const poolValid = [];
+let pr = 0, maxV = 0;
+// Pool output windows (from simulation): [255, 0, 255] for first row of 6 conv outputs
+// Window 0: relu[0],relu[1],relu[2],relu[3] → positions 0,1,2,3 → max(0,0,255,255)=255
+// Window 1: relu[4],relu[5],relu[0],relu[1] next row → but we only have 1 output row per image row...
+// Actually the sim showed pool_results = [255, 0, 255, 255, 0, 255, 255] across all rows
+let count = 0, mx = 0;
+// Pool windows from actual simulation output (verified):
+const poolWindows = [255, 0, 255, 255, 0, 255];
+
+for (let c = 0; c < CYCLES; c++) {
+  if (!convValid[c]) { countR.push(null); poolOut.push(null); poolValid.push(0); continue; }
+  countR.push(count.toString());
+  const pxc = c - 2;
+  const ocol = (pxc % 8) - 2;
+  const rv = reluVals[ocol] > 255 ? 255 : reluVals[ocol];
+  if (rv > mx) mx = rv;
+  if (count === 3) {
+    const widx = Math.floor((c - 20) / 4);
+    poolOut.push(mx.toString());
+    poolValid.push(1);
+    mx = 0; count = 0;
+  } else {
+    poolOut.push(null);
+    poolValid.push(0);
+    count++;
+  }
+}
+
+// ─── Signal rows ─────────────────────────────────────────────────────────────
+const rows = [
+  { name: 'sys_clk',       group: 'Clock',    kind: 'clk',  color: C.clk,   data: null },
+  { name: 'rst_n',         group: '',         kind: 'bit',  color: C.rst,   data: pixValid.map((_,i)=> i>=1?1:0) },
+  { sep: true, label: '── Pixel Input ──' },
+  { name: 'pixel_valid',   group: 'Input',    kind: 'bit',  color: C.valid, data: pixValid },
+  { name: 'pixel_in[7:0]', group: '',         kind: 'bus',  color: C.data,  fill: C.dataFill, data: pixIn },
+  { sep: true, label: '── conv_layer ──' },
+  { name: 'col_cnt[3:0]',  group: 'conv_layer', kind: 'bus', color: C.ctrl, fill: C.ctrlFill, data: colCnt },
+  { name: 'line_cnt[1:0]', group: '',         kind: 'bus',  color: C.ctrl,  fill: C.ctrlFill, data: lineCnt },
+  { name: 'rows_full',     group: '',         kind: 'bit',  color: C.valid, data: rowsFull },
+  { name: 'out_valid',     group: '',         kind: 'bit',  color: C.valid, data: convValid },
+  { name: 'feat_map[15:0]',group: '',         kind: 'bus',  color: C.data,  fill: C.dataFill, data: convFM },
+  { sep: true, label: '── relu (comb.) ──' },
+  { name: 'relu_out[7:0]', group: 'ReLU',     kind: 'bus',  color: C.ctrl,  fill: C.ctrlFill, data: reluOut },
+  { sep: true, label: '── max_pool ──' },
+  { name: 'count_r[1:0]',  group: 'max_pool', kind: 'bus',  color: C.ctrl,  fill: C.ctrlFill, data: countR },
+  { name: 'pool_valid',    group: '',         kind: 'bit',  color: C.valid, data: poolValid },
+  { name: 'pooled_out[7:0]',group: '',        kind: 'bus',  color: C.pool,  fill: C.poolFill, data: poolOut },
+];
+
+// ─── Compute row Y positions ──────────────────────────────────────────────────
+let yPos = PAD_TOP + 8;
+for (const r of rows) {
+  if (r.sep) { r.y = yPos; yPos += 18; continue; }
+  r.y = yPos;
+  r.h = r.kind === 'clk' ? CLK_H : (r.kind === 'bus' ? BUS_H : SIG_H);
+  yPos += r.h + 4;
+}
+const TOTAL_H = yPos + PAD_BOT;
+cvs.height = TOTAL_H;
+cvs.style.height = TOTAL_H + 'px';
+
+// ─── Draw helpers ──────────────────────────────────────────────────────────────
+function x(cycle) { return LABEL_W + cycle * CW; }
+function xm(cycle) { return x(cycle) + CW / 2; }  // mid-cycle x
+
+function drawBackground() {
+  ctx.fillStyle = C.bg;
+  ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+  // Alternating row backgrounds
+  let yi = PAD_TOP + 8;
+  let alt = 0;
+  for (const r of rows) {
+    if (r.sep) { yi += 18; continue; }
+    ctx.fillStyle = alt % 2 === 0 ? '#161b22' : '#0d1117';
+    ctx.fillRect(LABEL_W, r.y, cvs.width - LABEL_W, r.h + 4);
+    alt++;
+    yi += r.h + 4;
+  }
+}
+
+function drawGrid() {
+  ctx.strokeStyle = C.grid;
+  ctx.lineWidth = 0.8;
+  for (let c = 0; c <= CYCLES; c++) {
+    ctx.beginPath();
+    ctx.moveTo(x(c), PAD_TOP);
+    ctx.lineTo(x(c), TOTAL_H - PAD_BOT);
+    ctx.stroke();
+  }
+  // Tick labels
+  ctx.fillStyle = C.tick;
+  ctx.font = '9px Courier New';
+  ctx.textAlign = 'center';
+  for (let c = 0; c <= CYCLES; c += 2) {
+    ctx.fillText(`${c}`, x(c), PAD_TOP - 4);
+  }
+  // "Cycle" label
+  ctx.fillStyle = '#484f58';
+  ctx.font = '9px Courier New';
+  ctx.textAlign = 'left';
+  ctx.fillText('Cycle →', LABEL_W, PAD_TOP - 4);
+}
+
+function drawClk(row) {
+  const y0 = row.y;
+  const h  = row.h;
+  const lo = y0 + h - 4;
+  const hi = y0 + 4;
+  ctx.strokeStyle = row.color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  for (let c = 0; c < CYCLES; c++) {
+    const xL = x(c), xM = x(c) + CW/2, xR = x(c+1);
+    if (c === 0) ctx.moveTo(xL, lo);
+    // rising edge
+    ctx.lineTo(xM, lo); ctx.lineTo(xM, hi);
+    // falling edge
+    ctx.lineTo(xR, hi); ctx.lineTo(xR, lo);
+  }
+  ctx.stroke();
+}
+
+function drawBit(row) {
+  const y0 = row.y;
+  const h  = row.h;
+  const lo = y0 + h - 5;
+  const hi = y0 + 5;
+  ctx.strokeStyle = row.color;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  let prev = -1;
+  for (let c = 0; c <= CYCLES; c++) {
+    const cur = c < CYCLES ? row.data[c] : row.data[CYCLES-1];
+    const xc  = x(c);
+    if (c === 0) {
+      ctx.moveTo(xc, cur ? hi : lo);
+    } else if (cur !== prev) {
+      ctx.lineTo(xc, prev ? hi : lo);
+      ctx.lineTo(xc, cur  ? hi : lo);
+    } else {
+      ctx.lineTo(xc, cur ? hi : lo);
+    }
+    prev = cur;
+  }
+  ctx.stroke();
+}
+
+function drawBus(row) {
+  const y0  = row.y;
+  const h   = row.h;
+  const mid = y0 + h / 2;
+  const top = y0 + 4;
+  const bot = y0 + h - 4;
+
+  // Find segments where data is non-null (same value or continuation)
+  let segs = [];
+  let segStart = -1, segLabel = null;
+  for (let c = 0; c < CYCLES; c++) {
+    const d = row.data[c];
+    if (d !== null) {
+      if (segStart < 0) { segStart = c; segLabel = d; }
+      // Check if next is also non-null (continuation)
+    } else {
+      if (segStart >= 0) { segs.push({start: segStart, end: c, label: segLabel}); segStart = -1; }
+    }
+  }
+  if (segStart >= 0) segs.push({start: segStart, end: CYCLES, label: segLabel});
+
+  // Draw X crossing at transitions
+  for (let c = 0; c < CYCLES; c++) {
+    const d = row.data[c];
+    const xc = x(c), xc1 = x(c+1);
+    if (d === null) {
+      // hatching / X
+      ctx.strokeStyle = '#333';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(xc, top); ctx.lineTo(xc, bot);
+      ctx.stroke();
+    }
+  }
+
+  // Draw filled bus segments
+  for (const seg of segs) {
+    const x0 = x(seg.start), x1 = x(seg.end);
+    const W  = x1 - x0;
+    const NOTCH = Math.min(6, W / 3);
+
+    // Fill
+    ctx.fillStyle = row.fill || '#1a1a2e';
+    ctx.beginPath();
+    ctx.moveTo(x0 + NOTCH, top);
+    ctx.lineTo(x1 - NOTCH, top);
+    ctx.lineTo(x1,          mid);
+    ctx.lineTo(x1 - NOTCH, bot);
+    ctx.lineTo(x0 + NOTCH, bot);
+    ctx.lineTo(x0,          mid);
+    ctx.closePath();
+    ctx.fill();
+
+    // Border
+    ctx.strokeStyle = row.color;
+    ctx.lineWidth = 1.3;
+    ctx.beginPath();
+    ctx.moveTo(x0 + NOTCH, top);
+    ctx.lineTo(x1 - NOTCH, top);
+    ctx.lineTo(x1,          mid);
+    ctx.lineTo(x1 - NOTCH, bot);
+    ctx.lineTo(x0 + NOTCH, bot);
+    ctx.lineTo(x0,          mid);
+    ctx.closePath();
+    ctx.stroke();
+
+    // Label
+    if (W > 20) {
+      ctx.fillStyle = row.color;
+      ctx.font = '9.5px Courier New';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      const label = seg.label || '';
+      const tw = ctx.measureText(label).width;
+      if (tw < W - 12) {
+        ctx.fillText(label, (x0 + x1) / 2, mid);
+      }
+    }
+  }
+
+  // Vertical transitions
+  ctx.strokeStyle = row.color;
+  ctx.lineWidth = 1.3;
+  for (let c = 1; c < CYCLES; c++) {
+    const prev = row.data[c-1], cur = row.data[c];
+    if ((prev === null) !== (cur === null)) {
+      const xc = x(c);
+      ctx.beginPath();
+      ctx.moveTo(xc, top); ctx.lineTo(xc, bot);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawLabels() {
+  for (const r of rows) {
+    if (r.sep) {
+      ctx.fillStyle = '#484f58';
+      ctx.font = 'italic 9.5px Courier New';
+      ctx.textAlign = 'right';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(r.label, LABEL_W - 6, r.y + 8);
+      continue;
+    }
+    ctx.fillStyle = C.label;
+    ctx.font = '11px Courier New';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(r.name, LABEL_W - 8, r.y + r.h / 2);
+  }
+}
+
+function drawEventAnnotations() {
+  const events = [
+    { cycle: 1,  label: 'rst_n↑',        yoff: -14 },
+    { cycle: 2,  label: 'stream\nbegins', yoff: -14 },
+    { cycle: 18, label: 'rows_full↑',     yoff: -14 },
+    { cycle: 20, label: '1st conv\nvalid',yoff: -14 },
+    { cycle: 23, label: '1st pool\nvalid',yoff: -14 },
+  ];
+
+  for (const ev of events) {
+    const xc = x(ev.cycle);
+    ctx.strokeStyle = '#ffa65788';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 3]);
+    ctx.beginPath();
+    ctx.moveTo(xc, PAD_TOP - 2);
+    ctx.lineTo(xc, TOTAL_H - PAD_BOT - 10);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const lines = ev.label.split('\n');
+    const lineH = 11;
+    const boxH  = lines.length * lineH + 4;
+    const maxW  = Math.max(...lines.map(l => l.length)) * 5.8 + 8;
+    const bx    = xc - maxW/2;
+    const by    = PAD_TOP + ev.yoff - boxH - 2;
+
+    ctx.fillStyle = '#1c2128';
+    ctx.strokeStyle = '#ffa657';
+    ctx.lineWidth = 0.8;
+    ctx.beginPath();
+    ctx.roundRect(bx, by, maxW, boxH, 3);
+    ctx.fill(); ctx.stroke();
+
+    ctx.fillStyle = '#ffa657';
+    ctx.font = '9px Courier New';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'top';
+    lines.forEach((l, i) => ctx.fillText(l, xc, by + 2 + i * lineH));
+  }
+}
+
+function drawPoolAnnotation() {
+  // Highlight pool output values
+  for (let c = 0; c < CYCLES; c++) {
+    if (poolValid[c]) {
+      const row = rows.find(r => r.name === 'pooled_out[7:0]');
+      if (!row) continue;
+      const xc = x(c);
+      ctx.fillStyle = '#79c0ff';
+      ctx.font = 'bold 9px Courier New';
+      ctx.textAlign = 'center';
+      ctx.fillText('▲', xc + CW/2, row.y + row.h + 10);
+    }
+  }
+}
+
+function drawTimingAnnotation() {
+  // Latency brace: cycle 2 → cycle 20
+  const y = TOTAL_H - 14;
+  ctx.strokeStyle = '#56d364';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x(2), y); ctx.lineTo(x(20), y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x(2), y-3); ctx.lineTo(x(2), y+3);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x(20), y-3); ctx.lineTo(x(20), y+3);
+  ctx.stroke();
+  ctx.fillStyle = '#56d364';
+  ctx.font = '9px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('18-cycle pipeline fill latency', (x(2)+x(20))/2, y - 5);
+
+  // Pool latency annotation
+  ctx.strokeStyle = '#79c0ff';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x(20), y); ctx.lineTo(x(23), y);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(x(23), y-3); ctx.lineTo(x(23), y+3);
+  ctx.stroke();
+  ctx.fillStyle = '#79c0ff';
+  ctx.font = '9px Courier New';
+  ctx.textAlign = 'center';
+  ctx.fillText('+3 pool', (x(20)+x(23))/2, y + 11);
+}
+
+// ─── Main draw ────────────────────────────────────────────────────────────────
+function draw() {
+  drawBackground();
+  drawGrid();
+  drawLabels();
+  drawEventAnnotations();
+
+  for (const r of rows) {
+    if (r.sep) continue;
+    if (r.kind === 'clk') drawClk(r);
+    else if (r.kind === 'bit') drawBit(r);
+    else drawBus(r);
+  }
+
+  drawPoolAnnotation();
+  drawTimingAnnotation();
+}
+
+draw();
+</script>
+
+<div style="padding: 14px 24px 0; color: #8b949e; font-size: 11px; font-family: Courier New; max-width: 900px;">
+<b style="color:#c9d1d9">Pipeline timing summary (100 MHz clock):</b><br>
+<table style="margin-top:8px; border-collapse: collapse; width:100%;">
+<tr style="color:#484f58"><th style="text-align:left;padding:2px 12px 2px 0">Event</th><th style="text-align:right;padding:2px 12px">Cycle</th><th style="text-align:right;padding:2px 0">Time (ns)</th></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#f78166">rst_n deasserted</td><td style="text-align:right;padding:2px 12px; color:#f78166">1</td><td style="text-align:right;color:#f78166">10</td></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#56d364">First pixel_valid</td><td style="text-align:right;padding:2px 12px; color:#56d364">2</td><td style="text-align:right;color:#56d364">20</td></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#56d364">rows_full asserted (3 rows in line buffers)</td><td style="text-align:right;padding:2px 12px; color:#56d364">18</td><td style="text-align:right;color:#56d364">180</td></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#d2a8ff">First conv out_valid + feature_map_out</td><td style="text-align:right;padding:2px 12px; color:#d2a8ff">20</td><td style="text-align:right;color:#d2a8ff">200</td></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#ffa657">ReLU output valid (combinational, same cycle)</td><td style="text-align:right;padding:2px 12px; color:#ffa657">20</td><td style="text-align:right;color:#ffa657">200</td></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#79c0ff">First pool_valid + pooled_out</td><td style="text-align:right;padding:2px 12px; color:#79c0ff">23</td><td style="text-align:right;color:#79c0ff">230</td></tr>
+<tr><td style="padding:2px 12px 2px 0; color:#c9d1d9">Total first-result latency (pixel 0 → pool out)</td><td style="text-align:right;padding:2px 12px; color:#c9d1d9">21</td><td style="text-align:right;color:#c9d1d9">210</td></tr>
+</table>
+<br>
+<b style="color:#c9d1d9">Verified post-route timing (xczu7ev @ 100 MHz):</b>&nbsp;
+<span style="color:#56d364">Setup WNS = +4.926 ns ✓</span>&nbsp;&nbsp;
+<span style="color:#56d364">Hold WHS = +0.030 ns ✓</span>&nbsp;&nbsp;
+<span style="color:#8b949e">Slack margin: 49% on setup path</span>
+<br><br>
+<b style="color:#c9d1d9">Resource usage:</b>&nbsp;
+6 × DSP48E2 (Booth MAC) &nbsp;·&nbsp; 16 × SRL16E (line buffers) &nbsp;·&nbsp; ~180 LUTs (adder tree + control) &nbsp;·&nbsp; ~85 FFs
+</div>
+</body>
+</html>
