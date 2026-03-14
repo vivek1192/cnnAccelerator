@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Booth's Multiplier Architecture</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f4f4f9;
+        }
+        .container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+        }
+        .block {
+            width: 150px;
+            height: 60px;
+            background-color: #4CAF50;
+            color: white;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.3);
+        }
+        .connection {
+            height: 40px;
+            width: 1px;
+            background-color: #333;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="block">Multiplicand (A)</div>
+        <div class="connection"></div>
+        <div class="block">Multiplier (B) & Booth Recoding Logic</div>
+        <div class="connection"></div>
+        <div class="block">Partial Product</div>
+        <div class="connection"></div>
+        <div class="block">Accumulator</div>
+        <div class="connection"></div>
+        <div class="block">Shift Right Logic</div>
+        <div class="connection"></div>
+        <div class="block">Output Register</div>
+    </div>
+</body>
+</html>

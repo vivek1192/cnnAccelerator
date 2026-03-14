@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CNN Accelerator — Hardware Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+    startOnLoad: true,
+    theme: "neutral",
+    themeVariables: { fontSize: "13px", primaryColor:"#1e3a5f", primaryTextColor:"#fff",
+                      primaryBorderColor:"#4a90d9", lineColor:"#4a90d9",
+                      secondaryColor:"#1a2a1a", tertiaryColor:"#2a1a1a" },
+    flowchart: { useMaxWidth: true, nodeSpacing: 45, rankSpacing: 60, curve:"basis" }
+});
+</script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:"Segoe UI",Arial,sans-serif;background:#0a0d14;color:#d0d8e8}
+
+/* ── header ── */
+header{
+    background:linear-gradient(135deg,#0f1929,#1a2d4f);
+    padding:20px 36px;
+    border-bottom:2px solid #2d6aa8;
+    display:flex;align-items:center;gap:20px;
+}
+.header-badge{
+    background:#2d6aa8;color:#fff;
+    padding:6px 14px;border-radius:20px;
+    font-size:11px;font-weight:700;letter-spacing:1px;
+}
+header h1{font-size:20px;color:#7eb8f7;font-weight:700}
+header p{font-size:12px;color:#6688aa;margin-top:3px}
+
+/* ── tabs ── */
+.tab-bar{
+    display:flex;flex-wrap:wrap;gap:3px;
+    background:#0d1118;padding:10px 18px;
+    border-bottom:1px solid #1e2a3a;
+}
+.tb{
+    padding:7px 14px;border-radius:5px;
+    border:1px solid #1e2d42;background:#111824;
+    color:#7a90aa;cursor:pointer;font-size:11.5px;font-weight:600;
+    transition:all .18s;
+}
+.tb:hover{background:#1a2d44;color:#aaccee}
+.tb.on{background:#1a3d6a;color:#fff;border-color:#2d6aa8}
+
+/* ── panels ── */
+.panels{padding:28px 32px}
+.panel{display:none}
+.panel.on{display:block}
+.ptitle{font-size:17px;font-weight:700;color:#7eb8f7;margin-bottom:5px}
+.pdesc{font-size:12.5px;color:#7a90aa;line-height:1.7;margin-bottom:18px;max-width:900px}
+
+/* ── cards ── */
+.card{
+    background:#fff;border-radius:10px;
+    padding:28px;overflow-x:auto;
+    box-shadow:0 6px 30px rgba(0,0,0,.5);
+    margin-bottom:18px;
+}
+.card-dark{
+    background:#0f1620;border:1px solid #1e2d42;
+    border-radius:10px;padding:24px;overflow-x:auto;
+    margin-bottom:18px;
+}
+
+/* ── signal/bus labels ── */
+.sig{font-size:11px;font-family:monospace;
+     background:#1a2a3a;color:#7dd4fc;
+     padding:2px 7px;border-radius:4px;display:inline-block}
+
+/* ── PE grid ── */
+.pe-grid-wrap{overflow-x:auto}
+.pe-grid{border-collapse:collapse;font-size:11px}
+.pe-grid th{
+    background:#1a3a5a;color:#7eb8f7;
+    padding:6px 10px;text-align:center;
+    border:1px solid #2a4a6a;font-weight:700
+}
+.pe-grid td{
+    border:1px solid #2a4a6a;
+    padding:0;
+}
+.pe-cell{
+    width:90px;height:72px;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:3px;
+    background:#1a2a1a;transition:background .15s;cursor:default;
+    border-radius:4px;margin:2px;
+}
+.pe-cell:hover{background:#2a3d2a}
+.pe-cell .pe-id{font-size:10px;color:#4ad97a;font-weight:700}
+.pe-cell .pe-mac{font-size:9.5px;color:#8ab89a;font-family:monospace}
+.pe-cell .pe-acc{font-size:9px;color:#5a9a6a}
+.row-lbl td{background:#1a3a1a!important}
+.row-lbl .pe-cell{background:#1a3a1a;height:36px}
+.col-lbl{background:#1a2a3a;color:#4a9ad9;font-size:10px;font-weight:700;
+          text-align:center;padding:5px;border:1px solid #2a4a6a}
+
+/* weight bus (orange) and activation bus (blue) overlays */
+.w-bus{background:#3a2a0a;border-left:3px solid #d9a44a}
+.a-bus{background:#0a1a3a;border-top:3px solid #4a9ad9}
+.wa-bus{background:#1a1a2a;border-left:3px solid #d9a44a;border-top:3px solid #4a9ad9}
+
+/* ── pipeline stages ── */
+.pipe-wrap{display:flex;gap:0;overflow-x:auto;margin-bottom:10px}
+.pipe-stage{
+    flex:1;min-width:130px;
+    background:#111e30;border:1px solid #2a4a6a;
+    padding:14px 10px;text-align:center;position:relative;
+}
+.pipe-stage:first-child{border-radius:8px 0 0 8px}
+.pipe-stage:last-child{border-radius:0 8px 8px 0}
+.pipe-stage::after{
+    content:"▶";position:absolute;right:-11px;top:50%;
+    transform:translateY(-50%);color:#4a90d9;font-size:16px;z-index:2;
+}
+.pipe-stage:last-child::after{display:none}
+.ps-num{font-size:10px;color:#4a70aa;font-weight:700;margin-bottom:4px}
+.ps-name{font-size:13px;font-weight:700;color:#7eb8f7;margin-bottom:6px}
+.ps-detail{font-size:10.5px;color:#6a8aaa;line-height:1.5}
+.ps-latency{
+    margin-top:8px;background:#1a3050;
+    border-radius:4px;padding:3px 6px;
+    font-size:10px;color:#4ad9d9;font-weight:700
+}
+
+/* ── timeline ── */
+.timeline{overflow-x:auto}
+table.gantt{border-collapse:collapse;font-size:11px}
+table.gantt th{background:#1a2a3a;color:#7eb8f7;padding:6px 10px;
+               border:1px solid #2a4a6a;font-weight:700;white-space:nowrap}
+table.gantt td{border:1px solid #1a2a3a;padding:0;height:32px}
+.g-empty{background:#0d1118}
+.g-fetch-w{background:#3a2a0a;color:#d9a44a}
+.g-fetch-a{background:#0a1a3a;color:#4a9ad9}
+.g-compute{background:#1a3a1a;color:#4ad97a}
+.g-drain{background:#2a1a3a;color:#aa4ad9}
+.g-next{background:#2a2a1a;color:#d9d94a}
+.g-cell{width:60px;font-size:10px;font-weight:700;text-align:center;vertical-align:middle}
+
+/* ── booth detail ── */
+.booth-wrap{display:flex;gap:20px;flex-wrap:wrap}
+.booth-stage{
+    flex:1;min-width:220px;
+    background:#1a1e2a;border:1px solid #2a3a5a;
+    border-radius:8px;padding:16px;
+}
+.booth-stage h4{color:#7eb8f7;font-size:13px;margin-bottom:10px}
+.booth-op{
+    background:#0f1620;border-radius:5px;
+    padding:8px 12px;margin-bottom:8px;
+    font-family:monospace;font-size:11.5px;color:#cce;
+    border-left:3px solid #4a90d9;
+}
+
+/* ── AXI diagram ── */
+.axi-wrap{display:flex;gap:16px;flex-wrap:wrap}
+.axi-box{
+    flex:1;min-width:220px;
+    background:#0f1925;border:1px solid #2a4060;
+    border-radius:8px;padding:16px;
+}
+.axi-title{font-size:13px;font-weight:700;color:#7eb8f7;margin-bottom:10px;
+           display:flex;align-items:center;gap:8px}
+.axi-badge{background:#1a3d6a;color:#7eb8f7;font-size:10px;
+           padding:2px 8px;border-radius:10px;font-weight:700}
+.axi-row{display:flex;justify-content:space-between;
+         padding:5px 0;border-bottom:1px solid #1a2a3a;
+         font-size:11.5px}
+.axi-row:last-child{border-bottom:none}
+.axi-field{color:#8aa8cc}
+.axi-val{color:#4ad9d9;font-family:monospace;font-size:11px}
+
+/* ── legend ── */
+.legend{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px}
+.li{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#7a90aa}
+.ld{width:13px;height:13px;border-radius:3px}
+</style>
+</head>
+<body>
+
+<header>
+    <div>
+        <div class="header-badge">FPGA HARDWARE</div>
+    </div>
+    <div>
+        <h1>CNN Accelerator — Detailed Hardware Architecture</h1>
+        <p>8×8 PE Array · Output-Stationary · W4A8 · 100 MHz · Xilinx ZCU104 (xczu7ev-ffvc1156-2-e)</p>
+    </div>
+</header>
+
+<div class="tab-bar">
+    <button class="tb on"  onclick="show(0)">① Full Data Path</button>
+    <button class="tb"     onclick="show(1)">② Module Hierarchy</button>
+    <button class="tb"     onclick="show(2)">③ PE Array Grid</button>
+    <button class="tb"     onclick="show(3)">④ PE Internal Pipeline</button>
+    <button class="tb"     onclick="show(4)">⑤ Booth Multiplier</button>
+    <button class="tb"     onclick="show(5)">⑥ Memory & Double Buffer</button>
+    <button class="tb"     onclick="show(6)">⑦ Post-Accum Pipeline</button>
+    <button class="tb"     onclick="show(7)">⑧ AXI4 Interfaces</button>
+    <button class="tb"     onclick="show(8)">⑨ Execution Timeline</button>
+</div>
+
+<div class="panels">
+
+<!-- ═══════════════════════════════════════════════════
+     ① FULL DATA PATH
+═══════════════════════════════════════════════════ -->
+<div class="panel on" id="p0">
+<div class="ptitle">① Complete Accelerator Data Path</div>
+<div class="pdesc">End-to-end data flow through the CNN accelerator hardware. Data enters from DDR4 via DMA bursts, flows through the on-chip SRAM banks into the PE array for MAC computation, then passes through the post-accumulation pipeline before being written back.</div>
+<div class="card">
+<div class="mermaid">
+graph LR
+
+DDR4["DDR4 Memory\n4 GB off-chip\n~100 cycle latency"]
+
+subgraph DMA_SUB["DMA Engine — AXI4 Master"]
+    DMA_FSM["Burst FSM\nISSUE_AR → WAIT_R → DONE"]
+    AXI_MAS["AXI4 Master\n64-bit · 256-beat bursts\n~8.5 GB/s peak"]
+    DMA_FSM --- AXI_MAS
+end
+
+subgraph SRAM_BANKS["On-Chip SRAM Banks — 448 KB total · 1-cycle latency"]
+    WS["Weight SRAM\n256 KB · 57× BRAM36\nDual-port\n4-bit packed weights"]
+    ActS["Activation SRAM\n128 KB · 29× BRAM36\nDual-port\n8-bit activations"]
+    OutS["Output SRAM\n64 KB · 15× BRAM36\nDual-port\n8-bit clipped outputs"]
+end
+
+subgraph PEA["PE Array — 8×8 = 64 PEs · Output-Stationary"]
+    direction TB
+    WBus["Weight Broadcast Bus\n4-bit · 8 columns\none weight per column per cycle"]
+    ABus["Activation Broadcast Bus\n8-bit · 8 rows\none activation per row per cycle"]
+    PEs["64 Processing Elements\neach: Booth mult 8×4→12-bit\n+ 24-bit saturating accumulator"]
+    WBus --> PEs
+    ABus --> PEs
+end
+
+subgraph POST["Post-Accumulation Pipeline"]
+    QS["quantize_scale\nacc×M >> N\nround-to-nearest-even\nclip 0–255"]
+    RLU["relu\n8-bit saturating"]
+    MXP["max_pool\n2×2 · stride 2\n optional per layer"]
+    QS --> RLU --> MXP
+end
+
+AXI_REG["AXI4-Lite\nRegister File\nstart · status · dims\nscale_m · shift_n"]
+CTRL["Layer Controller FSM\nIdle→Fetch→Compute\n→Drain→Done"]
+ARM["ARM Cortex-A53\nHost Driver"]
+
+DDR4 -- "AXI4\n64-bit burst\nweights + activations" --> DMA_SUB
+DMA_SUB -- "write weight tile" --> WS
+DMA_SUB -- "write activation tile" --> ActS
+WS -- "4-bit weights\n8 per cycle" --> WBus
+ActS -- "8-bit activations\n8 per cycle" --> ABus
+PEs -- "drain 64×24-bit\nacc after tile" --> QS
+MXP -- "8-bit outputs" --> OutS
+OutS -- "DMA writeback\nor feed next layer" --> DDR4
+
+ARM -- "AXI4-Lite\nconfig + start" --> AXI_REG
+AXI_REG -- "config regs" --> CTRL
+CTRL -- "DMA requests\ntile counters\nacc_clear\nacc_valid" --> PEA
+CTRL -- "scale_m shift_n\nper layer" --> QS
+CTRL --> DMA_SUB
+CTRL -- "done_irq" --> ARM
+
+style DDR4 fill:#3a2a0a,stroke:#d9a44a,color:#fff
+style DMA_SUB fill:#0a2a0a,stroke:#4ad94a,color:#ccc
+style SRAM_BANKS fill:#0a0a2a,stroke:#4a4ad9,color:#ccc
+style PEA fill:#0a2a0a,stroke:#4ad97a,color:#ccc
+style POST fill:#0a2a2a,stroke:#4ad9d9,color:#ccc
+style AXI_REG fill:#2a0a2a,stroke:#aa4ad9,color:#fff
+style CTRL fill:#2a0a0a,stroke:#d94a4a,color:#fff
+style ARM fill:#2a2a0a,stroke:#d9d94a,color:#fff
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ② MODULE HIERARCHY
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p1">
+<div class="ptitle">② Verilog Module Hierarchy with Signal Widths</div>
+<div class="pdesc">Complete module tree showing all Verilog files, their interfaces, and the signal widths between them. Every interface is synchronous on posedge clk with active-low synchronous reset (rst_n).</div>
+<div class="card">
+<div class="mermaid">
+graph TD
+
+TOP["top.v\nAXI4 PS-PL bridge wrapper\nClock: 100 MHz · Reset: rst_n active-low sync"]
+
+ALS["axi4_lite_slave.v\n12 control registers\nbase addr 0xA000_0000\nAWVALID WVALID BVALID ARVALID RVALID"]
+DE["dma_engine.v\nAXI4 master · 64-bit data\nARLEN=255 burst · INCR type\nstates: IDLE→AR→WAIT_R→DONE"]
+LC["layer_controller.v\nOne-hot FSM · 8 states\ntile_row tile_col in_ch_idx out_ch_idx\ndone_irq_o"]
+
+WS2["weight_sram.v\n256 KB · RAMB36E2 inferred\nPort-A: DMA write 64-bit\nPort-B: PE read 64-bit\n1-cycle output register latency"]
+AS2["activation_sram.v\n128 KB · RAMB36E2 inferred\nPort-A: DMA write 64-bit\nPort-B: PE read 64-bit\n1-cycle output register latency"]
+OS2["output_sram.v\n64 KB · RAMB36E2 inferred\nPort-A: post-pipe write 8-bit\nPort-B: DMA read 64-bit\n1-cycle output register latency"]
+
+PEA2["pe_array.v\n8×8 genvar generate loop\nweight_i 4-bit × 64\nact_i 8-bit × 64\nacc_out 24-bit × 64\nacc_clear_i · acc_valid_o"]
+PE2["pe.v  ×64\nweight reg file: 8×4-bit\nact reg file: 4×8-bit\nacc_out 24-bit\nacc_valid_o · acc_clear_i"]
+BM2["booth_mult.v\ninput: act_i 8-bit unsigned\nweight_i 4-bit signed\noutput: product_o 12-bit\nvalid_i · valid_o\nlatency: 2 clock cycles"]
+
+QS2["quantize_scale.v\nacc_i 24-bit · scale_m_i 16-bit\nshift_n_i 4-bit · out_o 8-bit\ntemp 40-bit intermediate\nRound-to-Nearest-Even"]
+RLU2["relu.v\nin 8-bit → out 8-bit\nif in[7]: out=0 else out=in"]
+MP2["max_pool.v\nfeat_in 8-bit streaming\npooled_out 8-bit\n2×2 window stride 2\ncount_r 3-bit"]
+
+TOP --> ALS
+TOP --> DE
+TOP --> LC
+TOP --> WS2
+TOP --> AS2
+TOP --> OS2
+TOP --> PEA2
+TOP --> QS2
+TOP --> RLU2
+TOP --> MP2
+PEA2 --> PE2
+PE2  --> BM2
+
+style TOP  fill:#1a2d4f,stroke:#4a90d9,color:#fff
+style ALS  fill:#2a0a2a,stroke:#aa4ad9,color:#fff
+style DE   fill:#0a2a0a,stroke:#4ad94a,color:#fff
+style LC   fill:#2a0a0a,stroke:#d94a4a,color:#fff
+style WS2  fill:#0a0a2a,stroke:#4a4ad9,color:#fff
+style AS2  fill:#0a0a2a,stroke:#4a4ad9,color:#fff
+style OS2  fill:#0a0a2a,stroke:#4a4ad9,color:#fff
+style PEA2 fill:#0a2a0a,stroke:#4ad97a,color:#fff
+style PE2  fill:#0f3a0f,stroke:#4ad97a,color:#fff
+style BM2  fill:#1a3a0f,stroke:#8ad94a,color:#fff
+style QS2  fill:#0a2a2a,stroke:#4ad9d9,color:#fff
+style RLU2 fill:#0a2a2a,stroke:#4ad9d9,color:#fff
+style MP2  fill:#0a2a2a,stroke:#4ad9d9,color:#fff
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ③ PE ARRAY GRID
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p2">
+<div class="ptitle">③ 8×8 PE Array — Spatial Layout</div>
+<div class="pdesc">
+    Each row processes one <strong>input channel (ic)</strong>. Each column processes one <strong>output channel (oc)</strong>.
+    Weights are broadcast <span style="color:#d9a44a">▼ down each column</span> (same weight to all 8 PEs in a column).
+    Activations are broadcast <span style="color:#4a9ad9">► across each row</span> (same activation to all 8 PEs in a row).
+    Partial sums stay in the accumulator for the entire input-channel tile — never written off-chip mid-tile.
+</div>
+<div class="card-dark">
+    <div style="margin-bottom:12px;display:flex;gap:20px;flex-wrap:wrap">
+        <span style="font-size:12px;color:#d9a44a">▼ Weight broadcast (per column, per cycle) — 4-bit signed</span>
+        <span style="font-size:12px;color:#4a9ad9">► Activation broadcast (per row, per cycle) — 8-bit unsigned</span>
+        <span style="font-size:12px;color:#4ad97a">● Accumulator drains after full tile — 24-bit → quantize_scale</span>
+    </div>
+    <div class="pe-grid-wrap">
+    <table class="pe-grid">
+        <thead>
+            <tr>
+                <th style="background:#0d1118;color:#555">ic \\ oc</th>
+                <th>oc0</th><th>oc1</th><th>oc2</th><th>oc3</th>
+                <th>oc4</th><th>oc5</th><th>oc6</th><th>oc7</th>
+            </tr>
+            <tr>
+                <td class="col-lbl">—</td>
+                <td class="col-lbl">w[oc0]<br>↓</td>
+                <td class="col-lbl">w[oc1]<br>↓</td>
+                <td class="col-lbl">w[oc2]<br>↓</td>
+                <td class="col-lbl">w[oc3]<br>↓</td>
+                <td class="col-lbl">w[oc4]<br>↓</td>
+                <td class="col-lbl">w[oc5]<br>↓</td>
+                <td class="col-lbl">w[oc6]<br>↓</td>
+                <td class="col-lbl">w[oc7]<br>↓</td>
+            </tr>
+        </thead>
+        <tbody id="pe-grid-body"></tbody>
+    </table>
+    </div>
+    <div style="margin-top:16px;font-size:11.5px;color:#6a8aaa;line-height:1.8">
+        <strong style="color:#7eb8f7">Tile iteration order</strong> (outermost → innermost):<br>
+        <code style="color:#4ad9d9">for oc_tile → for oh_tile → for ow_tile → for ic_tile → COMPUTE [all 64 PEs] → DRAIN</code><br>
+        After all <em>ic_tiles</em> complete: drain 64 accumulators → quantize_scale → relu → output SRAM.
+        Then move to next ow/oh/oc tile.
+    </div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ④ PE PIPELINE
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p3">
+<div class="ptitle">④ Single PE — Cycle-Accurate Internal Pipeline</div>
+<div class="pdesc">Each PE has a 2-stage Booth multiplier feeding a saturating accumulator. The accumulator runs every cycle, accumulating one MAC per cycle after the initial 2-cycle pipeline fill. The accumulator clears synchronously at tile boundaries driven by the Layer Controller.</div>
+
+<div class="card-dark">
+    <div style="font-size:13px;color:#7eb8f7;font-weight:700;margin-bottom:14px">5-Stage Accelerator Pipeline (for a single output tile)</div>
+    <div class="pipe-wrap">
+        <div class="pipe-stage">
+            <div class="ps-num">STAGE 1</div>
+            <div class="ps-name">FETCH_W</div>
+            <div class="ps-detail">Read weight tile<br>from Weight SRAM<br>64-bit → unpack<br>→ 16 × 4-bit weights<br>Load PE reg files</div>
+            <div class="ps-latency">1 SRAM cycle</div>
+        </div>
+        <div class="pipe-stage">
+            <div class="ps-num">STAGE 2</div>
+            <div class="ps-name">FETCH_A</div>
+            <div class="ps-detail">Read activation tile<br>from Act SRAM<br>64-bit → unpack<br>→ 8 × 8-bit acts<br>Load PE reg files</div>
+            <div class="ps-latency">1 SRAM cycle</div>
+        </div>
+        <div class="pipe-stage">
+            <div class="ps-num">STAGE 3</div>
+            <div class="ps-name">COMPUTE S1</div>
+            <div class="ps-detail">Booth Stage 1<br>Partial product gen<br>Booth recoding of<br>4-bit weight<br>→ partial[11:0]</div>
+            <div class="ps-latency">1 clock cycle</div>
+        </div>
+        <div class="pipe-stage">
+            <div class="ps-num">STAGE 4</div>
+            <div class="ps-name">COMPUTE S2</div>
+            <div class="ps-detail">Booth Stage 2<br>Wallace tree reduce<br>Final 12-bit product<br>Sign-extend → 24-bit<br>valid_o asserted</div>
+            <div class="ps-latency">1 clock cycle</div>
+        </div>
+        <div class="pipe-stage">
+            <div class="ps-num">STAGE 5</div>
+            <div class="ps-name">ACCUMULATE</div>
+            <div class="ps-detail">24-bit saturating add<br>acc += product_24<br>Clamp at 0x7FFFFF<br>Never wraps<br>Runs every cycle</div>
+            <div class="ps-latency">1 clock cycle</div>
+        </div>
+    </div>
+
+    <div style="margin-top:20px">
+    <div style="font-size:13px;color:#7eb8f7;font-weight:700;margin-bottom:12px">PE Internal Dataflow (single PE, cycle-by-cycle)</div>
+    <div class="card">
+    <div class="mermaid">
+graph LR
+
+WI2["weight_i\n4-bit signed\nfrom Weight SRAM\nbroadcast from col bus"]
+AI2["activation_i\n8-bit unsigned\nfrom Act SRAM\nbroadcast from row bus"]
+
+WRF2["Weight Reg File\n8 × 4-bit\nw[0]..w[7]"]
+ARF2["Activation Reg File\n4 × 8-bit\na[0]..a[3]"]
+
+WI2 --> WRF2
+AI2 --> ARF2
+
+S1["Booth Stage 1\nPartial Products\nReg output\nCycle N"]
+WRF2 --> S1
+ARF2 --> S1
+
+S2["Booth Stage 2\nWallace Reduce\n12-bit product_o\nvalid_o = 1\nCycle N+1"]
+S1 --> S2
+
+SE["Sign Extend\n12-bit → 24-bit\npreserves sign"]
+S2 --> SE
+
+ADDER["24-bit Saturating Adder\nacc_new = acc_r + product_24\nif overflow → clamp 0x7FFFFF"]
+SE --> ADDER
+
+ACCREG["acc_r Register\n24-bit FF bank\nposedge clk\nacc_clear_i → sync clear to 0"]
+ADDER --> ACCREG
+ACCREG --> ADDER
+
+CLRIN["acc_clear_i\nfrom Layer Controller\ntile boundary signal"]
+CLRIN --> ACCREG
+
+VALID["acc_valid_o\nDriven by LC FSM\nwhen K²×C_in MACs done"]
+ACCREG --> VALID
+
+ACCOUT["acc_out 24-bit\nto quantize_scale\nonly when acc_valid_o = 1"]
+VALID --> ACCOUT
+
+style WI2 fill:#3a2a0a,stroke:#d9a44a,color:#fff
+style AI2 fill:#0a1a3a,stroke:#4a9ad9,color:#fff
+style S1 fill:#1a3a0f,stroke:#8ad94a,color:#fff
+style S2 fill:#1a3a0f,stroke:#8ad94a,color:#fff
+style ACCREG fill:#2a0a0a,stroke:#d94a4a,color:#fff,font-weight:bold
+style ADDER fill:#0a2a0a,stroke:#4ad94a,color:#fff
+style CLRIN fill:#2a0a0a,stroke:#d94a4a,color:#fff
+style VALID fill:#2a0a2a,stroke:#aa4ad9,color:#fff
+style ACCOUT fill:#0a2a2a,stroke:#4ad9d9,color:#fff
+</div>
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ⑤ BOOTH MULTIPLIER
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p4">
+<div class="ptitle">⑤ Booth Multiplier — Radix-2, 2-Stage Pipelined</div>
+<div class="pdesc">The Booth multiplier computes signed 4-bit weight × unsigned 8-bit activation → 12-bit product in 2 clock cycles. Radix-2 Booth recoding processes 1 bit per step, generating 2 partial products for a 4-bit multiplier. In synthesis, Vivado maps this to DSP48E2 primitives.</div>
+
+<div class="card-dark">
+<div class="booth-wrap">
+
+    <div class="booth-stage">
+        <h4>Inputs</h4>
+        <div class="booth-op">weight_i  [3:0]  ← signed, 2's complement<br>range: −8 to +7</div>
+        <div class="booth-op">activation_i [7:0] ← unsigned<br>range: 0 to 255</div>
+        <div style="font-size:11px;color:#6a8aaa;margin-top:8px">
+            Max product magnitude:<br>
+            |−8| × 255 = 2040 → fits in 12 bits (max 2^11 = 2048) ✓
+        </div>
+    </div>
+
+    <div class="booth-stage">
+        <h4>Stage 1 — Partial Product Generation (Cycle N)</h4>
+        <div class="booth-op">// Booth recoding: process pairs with overlap<br>// Extended multiplier: {w[3], w[3:0], 1'b0}<br>pair0 = {w[1], w[0], 1'b0}<br>pair1 = {w[3], w[2], w[1]}</div>
+        <div class="booth-op">// Each pair encodes: −2, −1, 0, +1, +2<br>pp0 = encode(pair0) × activation  // shifted 0<br>pp1 = encode(pair1) × activation  // shifted 2</div>
+        <div class="booth-op">// Register partial products<br>pp0_r [11:0] ← registered<br>pp1_r [11:0] ← registered (shifted 2)</div>
+    </div>
+
+    <div class="booth-stage">
+        <h4>Stage 2 — Wallace Tree Reduction (Cycle N+1)</h4>
+        <div class="booth-op">// Sum two 12-bit partial products<br>product_o [11:0] = pp0_r + pp1_r<br>// 12-bit adder, no overflow<br>// (proven by input range analysis)</div>
+        <div class="booth-op">// Assert output valid<br>valid_o ← 1<br>// valid_o = $past($past(valid_i))<br>// exactly 2-cycle pipeline delay</div>
+        <div style="font-size:11px;color:#6a8aaa;margin-top:8px">
+            Output is <strong style="color:#4ad97a">registered</strong> — stable for 1 full cycle.<br>
+            Accumulator samples on next posedge clk.
+        </div>
+    </div>
+
+    <div class="booth-stage">
+        <h4>Output → Accumulator</h4>
+        <div class="booth-op">// Sign-extend to 24-bit before adding<br>product_24 = {{12{product_o[11]}},<br>               product_o[11:0]}</div>
+        <div class="booth-op">// Saturating accumulate<br>sum = acc_r + product_24<br>// Overflow detect:<br>if (!acc_r[23] && !product_24[23]<br>    && sum[23])  // pos + pos = neg?<br>  acc_r ← 24'h7FFFFF  // saturate<br>else<br>  acc_r ← sum</div>
+        <div style="font-size:11px;color:#6a8aaa;margin-top:8px">
+            DSP48E2 note: Vivado infers a DSP for the multiply<br>
+            and a separate LUT chain for saturation mux.
+        </div>
+    </div>
+
+</div>
+
+<div style="margin-top:20px">
+<div style="font-size:12px;color:#7eb8f7;font-weight:700;margin-bottom:10px">Pipeline Timing Diagram</div>
+<div class="timeline">
+<table class="gantt">
+    <tr>
+        <th>Cycle</th>
+        <th>C0</th><th>C1</th><th>C2</th><th>C3</th><th>C4</th><th>C5</th>
+    </tr>
+    <tr>
+        <th>valid_i</th>
+        <td class="g-cell g-compute">1</td>
+        <td class="g-cell g-compute">1</td>
+        <td class="g-cell g-compute">1</td>
+        <td class="g-cell g-compute">1</td>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-empty"></td>
+    </tr>
+    <tr>
+        <th>Input A</th>
+        <td class="g-cell g-fetch-a" style="font-size:10px">a0·w0</td>
+        <td class="g-cell g-fetch-a" style="font-size:10px">a1·w1</td>
+        <td class="g-cell g-fetch-a" style="font-size:10px">a2·w2</td>
+        <td class="g-cell g-fetch-a" style="font-size:10px">a3·w3</td>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-empty"></td>
+    </tr>
+    <tr>
+        <th>Stage 1 PP</th>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-fetch-w" style="font-size:10px">pp(a0·w0)</td>
+        <td class="g-cell g-fetch-w" style="font-size:10px">pp(a1·w1)</td>
+        <td class="g-cell g-fetch-w" style="font-size:10px">pp(a2·w2)</td>
+        <td class="g-cell g-fetch-w" style="font-size:10px">pp(a3·w3)</td>
+        <td class="g-cell g-empty"></td>
+    </tr>
+    <tr>
+        <th>Stage 2 Product</th>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-compute" style="font-size:10px">a0·w0</td>
+        <td class="g-cell g-compute" style="font-size:10px">a1·w1</td>
+        <td class="g-cell g-compute" style="font-size:10px">a2·w2</td>
+        <td class="g-cell g-compute" style="font-size:10px">a3·w3</td>
+    </tr>
+    <tr>
+        <th>valid_o</th>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-drain">1</td>
+        <td class="g-cell g-drain">1</td>
+        <td class="g-cell g-drain">1</td>
+        <td class="g-cell g-drain">1</td>
+    </tr>
+    <tr>
+        <th>Accumulator</th>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-empty"></td>
+        <td class="g-cell g-compute" style="font-size:10px">acc+=a0w0</td>
+        <td class="g-cell g-compute" style="font-size:10px">acc+=a1w1</td>
+        <td class="g-cell g-compute" style="font-size:10px">acc+=a2w2</td>
+        <td class="g-cell g-compute" style="font-size:10px">acc+=a3w3</td>
+    </tr>
+</table>
+</div>
+<div style="font-size:11px;color:#6a8aaa;margin-top:8px">
+    After initial 2-cycle fill: <strong style="color:#4ad97a">1 MAC per cycle per PE</strong> → 64 MACs/cycle total for 64 PEs.
+    At 100 MHz: <strong style="color:#4ad97a">6.4 GMAC/s</strong> sustained throughput.
+</div>
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ⑥ MEMORY & DOUBLE BUFFER
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p5">
+<div class="ptitle">⑥ Memory Subsystem — SRAM Banks & Double Buffering</div>
+<div class="pdesc">Three on-chip SRAM banks are used. Double-buffering on the activation SRAM overlaps DMA prefetch of the next tile with PE computation on the current tile, hiding DDR4 access latency.</div>
+
+<div class="card">
+<div class="mermaid">
+graph TD
+
+subgraph DDR4MEM["DDR4 Off-Chip — 4 GB · ~100 cycle latency"]
+    WDDR["MobileNetV2 Weights\n~13 MB total · 4-bit packed\nAll layers stored flat"]
+    ADDR["Activation Maps\n~25 MB total · 8-bit\nOne full forward pass"]
+end
+
+subgraph DMA_E["DMA Engine — AXI4 Master"]
+    ABURST["AXI4 Burst Read\nARLEN=255 · 256 beats\n64-bit data bus\n= 2 KB per burst\nINCR addressing"]
+end
+
+subgraph SRAM_SYS["On-Chip SRAM — 448 KB · 1-cycle latency"]
+    subgraph WSRAM["Weight SRAM — 256 KB · 57 BRAM36"]
+        WPA["Port A\nDMA Write\n64-bit/cycle"]
+        WPB["Port B\nPE Read\n64-bit/cycle\n= 16 weights/cycle"]
+    end
+
+    subgraph DBUF["Activation SRAM — Double Buffered — 2 × 64 KB = 128 KB · 29 BRAM36"]
+        BUF_A["Buffer A — 64 KB\nCurrent tile\nBeing READ by PE array"]
+        BUF_B["Buffer B — 64 KB\nNext tile\nBeing WRITTEN by DMA"]
+        SWAP["Pointer Swap\n0-cycle overhead\nafter tile compute done"]
+        BUF_A -.->|"swap"| SWAP
+        BUF_B -.->|"swap"| SWAP
+    end
+
+    subgraph OSRAM["Output SRAM — 64 KB · 15 BRAM36"]
+        OPA["Port A\nPost-pipeline Write\n8-bit/cycle"]
+        OPB["Port B\nDMA Read\n64-bit/cycle"]
+    end
+end
+
+PES["PE Array\n64 PEs\nRead weights + activations\nWrite accumulators"]
+
+WDDR --> ABURST
+ADDR --> ABURST
+ABURST --> WPA
+ABURST --> BUF_B
+WPB --> PES
+BUF_A --> PES
+PES --> OPA
+OPB --> ADDR
+
+NOTE_DB["Double Buffering Effect:\nCycle 0-N:   PE computes on Buffer A\nCycle 0-N:   DMA prefetches to Buffer B\nCycle N+1:   Swap pointers\nCycle N+1-M: PE computes on Buffer B\nCycle N+1-M: DMA prefetches to Buffer A\n→ Hides ~100 cycle DDR4 latency\n→ Full compute-memory overlap"]
+SWAP -.-> NOTE_DB
+
+style DDR4MEM fill:#3a2a0a,stroke:#d9a44a,color:#ccc
+style SRAM_SYS fill:#0a0a2a,stroke:#4a4ad9,color:#ccc
+style WSRAM fill:#0f0f3a,stroke:#3a3ad9,color:#ccc
+style DBUF fill:#0f2a0f,stroke:#3a9a3a,color:#ccc
+style OSRAM fill:#0a0f3a,stroke:#3a5ad9,color:#ccc
+style NOTE_DB fill:#1a1a0a,stroke:#888,color:#aaa
+style DMA_E fill:#0a2a0a,stroke:#4ad94a,color:#ccc
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ⑦ POST-ACCUM PIPELINE
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p6">
+<div class="ptitle">⑦ Post-Accumulation Pipeline — Quantize → ReLU → MaxPool</div>
+<div class="pdesc">After the PE array completes a tile, all 64 accumulators drain through this pipeline. The quantize_scale unit applies layer-specific scale and shift parameters derived from QAT calibration. The rounding mode must exactly match the Python golden model.</div>
+<div class="card">
+<div class="mermaid">
+graph LR
+
+subgraph INPUT_STAGE["Input: 64 × 24-bit Accumulators"]
+    A0["acc[0]\n24-bit signed"]
+    A1["acc[1]\n24-bit signed"]
+    ADOTS["···"]
+    A63["acc[63]\n24-bit signed"]
+end
+
+subgraph QS_DETAIL["quantize_scale.v — pipelined, 3 stages"]
+    QS1["Step 1: Multiply\ntemp[39:0] = acc[23:0] × scale_m[15:0]\n40-bit intermediate prevents overflow\n1 cycle (DSP48E2)"]
+    QS2["Step 2: Right Shift\ntemp = temp >> shift_n\nshift_n ∈ {0 … 15}\ncombinatorial barrel shifter"]
+    QS3["Step 3: Round-to-Nearest-Even\nround_bit = temp[0]  ← discarded bit\nsticky = |temp[-1:0]  ← any lower bits\nlsb = final[0]  ← result parity\ndo_round = round_bit AND (sticky OR lsb)\nresult = truncated + do_round\nMust match Python round() exactly"]
+    QS4["Step 4: Clip\nif result > 255: out = 8'hFF\nif result < 0:   out = 8'h00\nelse: out = result[7:0]"]
+    QS1 --> QS2 --> QS3 --> QS4
+end
+
+subgraph RELU_DETAIL["relu.v"]
+    RL["if in[7] == 1: out = 0\nelse: out = in\nNote: after unsigned clip output\nis already ≥ 0 in most cases\nNeeded for depthwise conv\nnegative partial sums"]
+end
+
+subgraph POOL_DETAIL["max_pool.v — 2×2 · stride 2 · optional"]
+    MP_COL["Column buffer\nstores prev row\nfor 2-row comparison"]
+    MP_MAX["4-input MAX\npx[0,0] px[0,1]\npx[1,0] px[1,1]\n→ 1 output pixel"]
+    MP_CTR["count_r 3-bit\ntracks 2×2 window\noutput every 4 inputs"]
+    MP_COL --> MP_MAX
+    MP_CTR --> MP_MAX
+end
+
+PARAMS_BOX["Layer Params\nfrom AXI4-Lite regs\nscale_m [15:0]: Q-format multiplier\nshift_n [3:0]: right-shift amount\nUnique per layer · loaded at LOAD_CONFIG\nDerived from QAT: M = round(2^N × S)\nwhere S = float32 scale factor"]
+
+A0 --> QS1
+A1 --> QS1
+A63 --> QS1
+PARAMS_BOX -.-> QS1
+PARAMS_BOX -.-> QS2
+QS4 --> RL
+RL --> MP_COL
+RL --> MP_CTR
+MP_MAX --> OUT_SRAM["Output SRAM\n8-bit result\nPort A write\n1 value per cycle"]
+
+style INPUT_STAGE fill:#2a0a0a,stroke:#d94a4a,color:#ccc
+style QS_DETAIL fill:#0a2a2a,stroke:#4ad9d9,color:#ccc
+style RELU_DETAIL fill:#0a2a0a,stroke:#4ad97a,color:#ccc
+style POOL_DETAIL fill:#1a1a2a,stroke:#7a7ad9,color:#ccc
+style PARAMS_BOX fill:#1a1a0a,stroke:#888,color:#aaa
+style OUT_SRAM fill:#0a0a2a,stroke:#4a4ad9,color:#fff
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ⑧ AXI4 INTERFACES
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p7">
+<div class="ptitle">⑧ AXI4 Interface Specifications</div>
+<div class="pdesc">Three AXI4 interfaces connect the accelerator to the ARM PS. AXI4-Lite carries control register reads/writes. The AXI4 HP port carries high-bandwidth DMA bursts for weights and activations. AXI4-Stream (optional) carries streaming pixel data directly from sensor.</div>
+
+<div class="card-dark">
+<div class="axi-wrap">
+
+    <div class="axi-box">
+        <div class="axi-title">AXI4-Lite <span class="axi-badge">CTRL PLANE</span></div>
+        <div class="axi-row"><span class="axi-field">Purpose</span><span class="axi-val">Control registers</span></div>
+        <div class="axi-row"><span class="axi-field">Data width</span><span class="axi-val">32-bit</span></div>
+        <div class="axi-row"><span class="axi-field">Addr width</span><span class="axi-val">32-bit</span></div>
+        <div class="axi-row"><span class="axi-field">Burst</span><span class="axi-val">Single beat only</span></div>
+        <div class="axi-row"><span class="axi-field">Base addr</span><span class="axi-val">0xA000_0000</span></div>
+        <div class="axi-row"><span class="axi-field">Registers</span><span class="axi-val">12 × 32-bit</span></div>
+        <div style="margin-top:12px;font-size:11px;color:#6a8aaa">
+        <strong style="color:#7eb8f7">Register Map:</strong><br>
+        0x00 CTRL &nbsp;&nbsp;&nbsp; — start[0], reset[1]<br>
+        0x04 STATUS &nbsp;— done[0], busy[1], err[2]<br>
+        0x08 LAYER_COUNT<br>
+        0x0C CURRENT_LAYER (RO)<br>
+        0x10 WEIGHT_BASE_ADDR<br>
+        0x14 ACT_BASE_ADDR<br>
+        0x18 SCALE_M [15:0]<br>
+        0x1C SHIFT_N [3:0]<br>
+        0x20 IN_CHANNELS<br>
+        0x24 OUT_CHANNELS<br>
+        0x28 IN_HEIGHT<br>
+        0x2C IN_WIDTH
+        </div>
+    </div>
+
+    <div class="axi-box">
+        <div class="axi-title">AXI4 Master <span class="axi-badge">DATA PLANE / DMA</span></div>
+        <div class="axi-row"><span class="axi-field">Purpose</span><span class="axi-val">Weight + Act DMA</span></div>
+        <div class="axi-row"><span class="axi-field">Direction</span><span class="axi-val">Master (reads DDR4)</span></div>
+        <div class="axi-row"><span class="axi-field">Data width</span><span class="axi-val">64-bit (8 bytes)</span></div>
+        <div class="axi-row"><span class="axi-field">Addr width</span><span class="axi-val">32-bit</span></div>
+        <div class="axi-row"><span class="axi-field">Burst type</span><span class="axi-val">INCR</span></div>
+        <div class="axi-row"><span class="axi-field">Max burst</span><span class="axi-val">256 beats (ARLEN=FF)</span></div>
+        <div class="axi-row"><span class="axi-field">Per burst</span><span class="axi-val">2 KB data</span></div>
+        <div class="axi-row"><span class="axi-field">Peak BW</span><span class="axi-val">64b × 100M = 6.4 GB/s</span></div>
+        <div class="axi-row"><span class="axi-field">DDR4 avail</span><span class="axi-val">~8.5 GB/s (ZCU104)</span></div>
+        <div class="axi-row"><span class="axi-field">Cache</span><span class="axi-val">0b0011 Normal Non-$</span></div>
+        <div class="axi-row"><span class="axi-field">ID width</span><span class="axi-val">4-bit (16 IDs)</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#6a8aaa">
+        Channel signals: ARVALID ARREADY RVALID RREADY RDATA RLAST RRESP
+        </div>
+    </div>
+
+    <div class="axi-box">
+        <div class="axi-title">AXI4-Stream <span class="axi-badge">PIXEL INPUT</span></div>
+        <div class="axi-row"><span class="axi-field">Purpose</span><span class="axi-val">Streaming pixels</span></div>
+        <div class="axi-row"><span class="axi-field">Direction</span><span class="axi-val">Slave (receive)</span></div>
+        <div class="axi-row"><span class="axi-field">TDATA</span><span class="axi-val">8-bit (1 pixel/cycle)</span></div>
+        <div class="axi-row"><span class="axi-field">TLAST</span><span class="axi-val">End of image frame</span></div>
+        <div class="axi-row"><span class="axi-field">TVALID</span><span class="axi-val">Sender has data</span></div>
+        <div class="axi-row"><span class="axi-field">TREADY</span><span class="axi-val">Accelerator ready</span></div>
+        <div class="axi-row"><span class="axi-field">Source</span><span class="axi-val">PS DMA or sensor</span></div>
+        <div style="margin-top:8px;font-size:11px;color:#6a8aaa">
+        Pixels stream row-major order.<br>
+        TLAST asserted on last pixel of each image.<br>
+        Back-pressure via TREADY when SRAM full.
+        </div>
+    </div>
+
+</div>
+</div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════
+     ⑨ EXECUTION TIMELINE
+═══════════════════════════════════════════════════ -->
+<div class="panel" id="p8">
+<div class="ptitle">⑨ Accelerator Execution Timeline — One Convolutional Layer</div>
+<div class="pdesc">Shows how DMA, PE computation, and output draining are pipelined across tiles. Double-buffering overlaps DMA prefetch with PE compute, achieving near-full compute utilisation after the initial startup latency.</div>
+<div class="card-dark">
+    <div style="font-size:12px;color:#7eb8f7;font-weight:700;margin-bottom:12px">Layer Execution: 4 tiles shown · Double-buffer overlap highlighted</div>
+    <div class="timeline">
+    <table class="gantt" style="min-width:900px">
+        <tr>
+            <th style="width:130px">Unit \ Tile →</th>
+            <th colspan="2">Tile 0</th>
+            <th colspan="2">Tile 1</th>
+            <th colspan="2">Tile 2</th>
+            <th colspan="2">Tile 3</th>
+        </tr>
+        <tr>
+            <th></th>
+            <th>W fetch</th><th>Compute</th>
+            <th>W fetch</th><th>Compute</th>
+            <th>W fetch</th><th>Compute</th>
+            <th>W fetch</th><th>Compute</th>
+        </tr>
+        <tr>
+            <th>DMA — Weights</th>
+            <td class="g-cell g-fetch-w">Fetch W0</td>
+            <td class="g-cell g-empty">idle</td>
+            <td class="g-cell g-fetch-w">Fetch W1</td>
+            <td class="g-cell g-empty">idle</td>
+            <td class="g-cell g-fetch-w">Fetch W2</td>
+            <td class="g-cell g-empty">idle</td>
+            <td class="g-cell g-fetch-w">Fetch W3</td>
+            <td class="g-cell g-empty">idle</td>
+        </tr>
+        <tr>
+            <th>DMA — Acts (Buffer B)</th>
+            <td class="g-cell g-fetch-a">Fetch A0→BufB</td>
+            <td class="g-cell g-fetch-a">Fetch A1→BufB</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-fetch-a">Fetch A2→BufB</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-fetch-a">Fetch A3→BufB</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-empty">idle</td>
+        </tr>
+        <tr>
+            <th>PE Array (Buffer A)</th>
+            <td class="g-cell g-empty">wait</td>
+            <td class="g-cell g-compute">Compute T0</td>
+            <td class="g-cell g-empty">swap</td>
+            <td class="g-cell g-compute">Compute T1</td>
+            <td class="g-cell g-empty">swap</td>
+            <td class="g-cell g-compute">Compute T2</td>
+            <td class="g-cell g-empty">swap</td>
+            <td class="g-cell g-compute">Compute T3</td>
+        </tr>
+        <tr>
+            <th>Post-Accum Pipeline</th>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-drain">Drain T0</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-drain">Drain T1</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-drain">Drain T2</td>
+            <td class="g-cell g-empty"></td>
+        </tr>
+        <tr>
+            <th>Output SRAM Write</th>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next">Write T0</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next">Write T1</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next">Write T2</td>
+            <td class="g-cell g-empty"></td>
+        </tr>
+        <tr>
+            <th>Buffer Swap</th>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next" style="font-size:10px">→swap</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next" style="font-size:10px">→swap</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next" style="font-size:10px">→swap</td>
+            <td class="g-cell g-empty"></td>
+            <td class="g-cell g-next" style="font-size:10px">→swap</td>
+        </tr>
+    </table>
+    </div>
+
+    <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+        <div style="flex:1;min-width:220px;background:#1a1e2a;border:1px solid #2a3a5a;border-radius:8px;padding:14px">
+            <div style="font-size:12px;color:#7eb8f7;font-weight:700;margin-bottom:8px">Throughput Analysis</div>
+            <div style="font-size:11.5px;color:#6a8aaa;line-height:1.9">
+                PE array: <span style="color:#4ad97a">64 MACs/cycle</span><br>
+                Clock: <span style="color:#4ad97a">100 MHz</span><br>
+                Sustained: <span style="color:#4ad97a">6.4 GMAC/s</span><br>
+                MobileNetV2 MACs: ~300M<br>
+                Latency: 300M / 6.4G ≈ <span style="color:#4ad97a">47 ms/image</span><br>
+                Throughput: ≈ <span style="color:#4ad97a">21 images/sec</span>
+            </div>
+        </div>
+        <div style="flex:1;min-width:220px;background:#1a1e2a;border:1px solid #2a3a5a;border-radius:8px;padding:14px">
+            <div style="font-size:12px;color:#7eb8f7;font-weight:700;margin-bottom:8px">Efficiency Targets</div>
+            <div style="font-size:11.5px;color:#6a8aaa;line-height:1.9">
+                TOPS: <span style="color:#4ad97a">~0.6</span> (300M×2 / 47ms)<br>
+                Power budget: <span style="color:#4ad97a">≤ 5W</span><br>
+                Target TOPS/W: <span style="color:#4ad97a">&gt; 4.0</span><br>
+                Comparison: Angel-Eye <span style="color:#d9a44a">3.0 TOPS/W</span><br>
+                DSP utilization: <span style="color:#4ad97a">64/1728 = 3.7%</span><br>
+                LUT utilization: <span style="color:#4ad97a">~20%</span>
+            </div>
+        </div>
+        <div style="flex:1;min-width:220px;background:#1a1e2a;border:1px solid #2a3a5a;border-radius:8px;padding:14px">
+            <div style="font-size:12px;color:#7eb8f7;font-weight:700;margin-bottom:8px">Critical Path @ 100 MHz</div>
+            <div style="font-size:11.5px;color:#6a8aaa;line-height:1.9">
+                FETCH stages: <span style="color:#4ad97a">4.5 ns</span> (SRAM)<br>
+                Booth S1: <span style="color:#4ad97a">6.5 ns</span><br>
+                Booth S2: <span style="color:#4ad97a">5.0 ns</span><br>
+                Accumulate: <span style="color:#4ad97a">5.5 ns</span><br>
+                Quantize ×: <span style="color:#d94a4a">7.5 ns ← tightest</span><br>
+                Budget: <span style="color:#4ad97a">10 ns (100 MHz)</span>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+</div><!-- /panels -->
+
+<script>
+// Build PE grid
+const rows = 8, cols = 8;
+const body = document.getElementById('pe-grid-body');
+for (let r = 0; r < rows; r++) {
+    const tr = document.createElement('tr');
+    // Row label
+    const lbl = document.createElement('td');
+    lbl.className = 'col-lbl';
+    lbl.innerHTML = `ic${r} →`;
+    tr.appendChild(lbl);
+    for (let c = 0; c < cols; c++) {
+        const td = document.createElement('td');
+        let cls = '';
+        // corner: both buses
+        if (r === 0 && c === 0) cls = 'wa-bus';
+        else if (c === 0) cls = 'w-bus';  // weight col highlight
+        else if (r === 0) cls = 'a-bus';  // act row highlight
+        const div = document.createElement('div');
+        div.className = `pe-cell ${cls}`;
+        div.innerHTML = `
+            <div class="pe-id">PE[${r}][${c}]</div>
+            <div class="pe-mac">W[oc${c}]×A[ic${r}]</div>
+            <div class="pe-acc">acc[${r*8+c}] 24-bit</div>`;
+        div.title = `PE row=${r} col=${c} | weight=W[oc${c},ic${r}] activation=A[ic${r}]`;
+        td.appendChild(div);
+        tr.appendChild(td);
+    }
+    body.appendChild(tr);
+}
+
+// Tabs
+const btns   = document.querySelectorAll('.tb');
+const panels = document.querySelectorAll('.panel');
+function show(i) {
+    btns.forEach((b,j)   => b.classList.toggle('on', j===i));
+    panels.forEach((p,j) => p.classList.toggle('on', j===i));
+}
+</script>
+</body>
+</html>

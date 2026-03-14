@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>CNN Accelerator — Complete Architecture</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+mermaid.initialize({
+    startOnLoad: true,
+    theme: "default",
+    themeVariables: { fontSize: "15px" },
+    flowchart: { useMaxWidth: true, nodeSpacing: 50, rankSpacing: 70, curve: "basis" },
+    stateDiagram: { useMaxWidth: true }
+});
+</script>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: "Segoe UI", Arial, sans-serif; background: #0f1117; color: #e0e0e0; }
+
+header {
+    background: linear-gradient(135deg, #1a1f2e, #2d3561);
+    padding: 24px 40px;
+    border-bottom: 2px solid #4a90d9;
+}
+header h1 { font-size: 22px; color: #7eb8f7; font-weight: 600; }
+header p  { font-size: 13px; color: #8899aa; margin-top: 4px; }
+
+/* Tab bar */
+.tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    background: #151820;
+    padding: 12px 20px;
+    border-bottom: 1px solid #2a2f3e;
+}
+.tab-btn {
+    padding: 8px 16px;
+    border: 1px solid #2a3550;
+    border-radius: 6px;
+    background: #1c2030;
+    color: #8899bb;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+.tab-btn:hover  { background: #253050; color: #cce; }
+.tab-btn.active { background: #2d5092; color: #fff; border-color: #4a90d9; }
+
+/* Tab panels */
+.panels { padding: 30px; }
+.panel  { display: none; }
+.panel.active { display: block; }
+
+.panel-title {
+    font-size: 18px;
+    font-weight: 600;
+    color: #7eb8f7;
+    margin-bottom: 6px;
+}
+.panel-desc {
+    font-size: 13px;
+    color: #8899aa;
+    margin-bottom: 20px;
+    line-height: 1.6;
+}
+
+.diagram-card {
+    background: #ffffff;
+    border-radius: 10px;
+    padding: 30px;
+    overflow-x: auto;
+    box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+}
+
+.legend {
+    margin-top: 18px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #aabbcc;
+}
+.legend-dot {
+    width: 12px; height: 12px;
+    border-radius: 3px;
+}
+</style>
+</head>
+<body>
+
+<header>
+    <h1>CNN Accelerator — Complete Architecture Reference</h1>
+    <p>Quantized MobileNetV2 Accelerator for Chest X-Ray Classification on Xilinx ZCU104 &nbsp;|&nbsp; W4A8 · 8×8 PE Array · Output-Stationary Dataflow</p>
+</header>
+
+<!-- Tab bar -->
+<div class="tabs">
+    <button class="tab-btn active"  onclick="show(0)">1 · System Overview</button>
+    <button class="tab-btn"         onclick="show(1)">2 · Accelerator Top-Level</button>
+    <button class="tab-btn"         onclick="show(2)">3 · PE Architecture</button>
+    <button class="tab-btn"         onclick="show(3)">4 · PE Array Dataflow</button>
+    <button class="tab-btn"         onclick="show(4)">5 · Memory Hierarchy</button>
+    <button class="tab-btn"         onclick="show(5)">6 · FSM Controller</button>
+    <button class="tab-btn"         onclick="show(6)">7 · Post-Accumulation Pipeline</button>
+    <button class="tab-btn"         onclick="show(7)">8 · MobileNetV2 Model</button>
+    <button class="tab-btn"         onclick="show(8)">9 · Project Phases</button>
+</div>
+
+<div class="panels">
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 0 — System Overview
+══════════════════════════════════════════════════════════════ -->
+<div class="panel active" id="p0">
+<div class="panel-title">System Overview — ZCU104 SoC Partition</div>
+<div class="panel-desc">The design is split across the Processing System (PS) and Programmable Logic (PL) of the Xilinx Zynq UltraScale+ ZCU104. The ARM Cortex-A53 handles data management and orchestration; the PL fabric runs the accelerator.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph TD
+
+subgraph ZCU104["Xilinx Zynq UltraScale+ ZCU104"]
+
+    subgraph PS["Processing System — ARM Cortex-A53"]
+        HOST["Host Application\nLinux / Bare-metal Driver"]
+        DMA_PS["PS DMA Controller"]
+        HOST --> DMA_PS
+    end
+
+    subgraph PL["Programmable Logic — FPGA Fabric"]
+        ACCEL["CNN Accelerator\ncnn_accelerator.v"]
+        BRAM_W["Weight SRAM\n256 KB"]
+        BRAM_A["Activation SRAM\n128 KB"]
+        BRAM_O["Output SRAM\n64 KB"]
+        ACCEL --> BRAM_W
+        ACCEL --> BRAM_A
+        ACCEL --> BRAM_O
+    end
+
+    DDR4["DDR4 Memory — 4 GB\nModel Weights ~13 MB | Feature Maps ~25 MB | OS"]
+
+    PS  -- "AXI4-Lite\nControl & Config" --> ACCEL
+    DMA_PS -- "AXI4 HP Port\nDMA Bursts" --> ACCEL
+    PS  <-- "AXI4\nRead/Write" --> DDR4
+    PL  <-- "AXI4 HP\nWeight & Activation Fetch" --> DDR4
+
+end
+
+XRAY["Chest X-Ray Image\n224×224 pixels"]
+OUT["Classification Output\n14-class disease scores"]
+
+XRAY --> HOST
+ACCEL --> OUT
+
+style PS   fill:#1a3a6b,stroke:#4a90d9,color:#fff
+style PL   fill:#1a4a2b,stroke:#4aaa6b,color:#fff
+style DDR4 fill:#3a2a1a,stroke:#d99a4a,color:#fff
+style ZCU104 fill:#111827,stroke:#555,color:#ccc
+style XRAY fill:#2a1a3a,stroke:#aa6ad9,color:#fff
+style OUT  fill:#2a1a3a,stroke:#aa6ad9,color:#fff
+</div>
+</div>
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1a3a6b"></div>Processing System (ARM)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a4a2b"></div>Programmable Logic (FPGA)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a2a1a"></div>External Memory (DDR4)</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 1 — Accelerator Top-Level
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p1">
+<div class="panel-title">Accelerator Top-Level — Module Hierarchy</div>
+<div class="panel-desc">The accelerator is composed of six major subsystems. The Layer Controller FSM orchestrates all operations. The DMA Engine fetches data from DDR4. The PE Array computes MAC operations. Three SRAM banks hold weights, activations, and outputs.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph TD
+
+TOP["top.v\nAXI4 Interfaces + PS-PL Bridge"]
+ACCEL["cnn_accelerator.v\nTop-Level Accelerator + Layer Scheduler"]
+
+TOP --> ACCEL
+
+ACCEL --> CTRL["layer_controller.v\nFSM: IDLE→FETCH→COMPUTE→DRAIN→DONE\nTile iteration and layer sequencing"]
+ACCEL --> DMA["dma_engine.v\nAXI4 Master\nBurst-reads weights and activations from DDR4\n256-beat bursts, 64-bit wide"]
+ACCEL --> PEA["pe_array.v\n8×8 = 64 Processing Elements\nOutput-stationary dataflow"]
+ACCEL --> WS["weight_sram.v\n256 KB Dual-Port BRAM\nHolds one layer's quantized filters"]
+ACCEL --> AS["activation_sram.v\n128 KB Dual-Port BRAM\nInput feature map tile"]
+ACCEL --> OS["output_sram.v\n64 KB Dual-Port BRAM\nOutput feature map tile"]
+ACCEL --> AXI["axi4_lite_slave.v\nControl Register File\n12 registers: start, status, dims, scale"]
+
+PEA --> PE["pe.v × 64\nSingle Processing Element\nBooth Mult + 24-bit Accumulator"]
+PE  --> BM["booth_mult.v\nSigned 4-bit × Unsigned 8-bit\n→ 12-bit product, 2-cycle pipeline"]
+
+ACCEL --> QS["quantize_scale.v\nacc×M >> N, round-to-nearest-even\nclip to 8-bit unsigned"]
+ACCEL --> RLU["relu.v\n8-bit saturating ReLU"]
+ACCEL --> MP["max_pool.v\n2×2 max pooling, stride 2\nstreaming input"]
+
+QS --> RLU --> MP
+
+style TOP  fill:#2d3561,stroke:#4a90d9,color:#fff
+style ACCEL fill:#1a3a5b,stroke:#4a90d9,color:#fff
+style CTRL fill:#3a1a1a,stroke:#d94a4a,color:#fff
+style DMA  fill:#1a3a1a,stroke:#4ad94a,color:#fff
+style PEA  fill:#3a2a1a,stroke:#d9a44a,color:#fff
+style PE   fill:#4a3a1a,stroke:#d9a44a,color:#fff
+style BM   fill:#5a4a1a,stroke:#d9c44a,color:#fff
+style WS   fill:#1a1a3a,stroke:#4a4ad9,color:#fff
+style AS   fill:#1a1a3a,stroke:#4a4ad9,color:#fff
+style OS   fill:#1a1a3a,stroke:#4a4ad9,color:#fff
+style AXI  fill:#2a1a3a,stroke:#aa4ad9,color:#fff
+style QS   fill:#1a3a3a,stroke:#4ad9d9,color:#fff
+style RLU  fill:#1a3a3a,stroke:#4ad9d9,color:#fff
+style MP   fill:#1a3a3a,stroke:#4ad9d9,color:#fff
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 2 — PE Architecture
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p2">
+<div class="panel-title">Processing Element (PE) Internal Architecture</div>
+<div class="panel-desc">Each of the 64 PEs contains a local register file, a 2-stage pipelined Booth multiplier, and a 24-bit saturating accumulator. The accumulator clamps to max positive value on overflow — never wraps — critical for medical safety.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph TD
+
+WI["weight_i 4-bit\nSigned, per-channel quantized\nRange: -8 to +7"]
+AI["activation_i 8-bit\nUnsigned, symmetric quantized\nRange: 0 to 255"]
+
+WRF["Weight Register File\n8 × 4-bit registers\nHolds one tile's weight row"]
+ARF["Activation Register File\n4 × 8-bit registers\nHolds one tile's activation col"]
+
+WI --> WRF
+AI --> ARF
+
+BM_S1["Booth Mult — Stage 1\nPartial product generation\nBooth recoding of 4-bit weight\nclock cycle N"]
+BM_S2["Booth Mult — Stage 2\nWallace tree reduction\nFinal 12-bit product\nclock cycle N+1"]
+
+WRF --> BM_S1
+ARF --> BM_S1
+BM_S1 --> BM_S2
+
+SE["Sign Extend\n12-bit → 24-bit\npreserves signed arithmetic"]
+BM_S2 --> SE
+
+ADD["24-bit Saturating Adder\nacc_new = acc + product_24\nif overflow: clamp to 24'h7FFFFF\nnever wraps"]
+SE --> ADD
+
+ACC["24-bit Accumulator Register\nClocked on posedge clk\nSynchronous clear: acc_clear_i\nHolds partial sum across entire tile"]
+ADD --> ACC
+ACC --> ADD
+
+VALID{"acc_valid_o\nAsserted when tile\naccumulation complete\nDriven by layer_controller"}
+ACC --> VALID
+
+OUT["acc_out 24-bit\nTo quantize_scale.v\nwhen acc_valid_o = 1"]
+VALID --> OUT
+
+CLEAR["acc_clear_i\nSynchronous clear\nAsserted at tile boundary\nby layer_controller"]
+CLEAR --> ACC
+
+style WI   fill:#1a3a5a,stroke:#4a9ad9,color:#fff
+style AI   fill:#1a3a5a,stroke:#4a9ad9,color:#fff
+style WRF  fill:#1a2a4a,stroke:#4a7ab9,color:#fff
+style ARF  fill:#1a2a4a,stroke:#4a7ab9,color:#fff
+style BM_S1 fill:#3a2a1a,stroke:#d9a44a,color:#fff
+style BM_S2 fill:#3a2a1a,stroke:#d9a44a,color:#fff
+style SE   fill:#2a2a2a,stroke:#888,color:#fff
+style ADD  fill:#1a3a1a,stroke:#4ad94a,color:#fff
+style ACC  fill:#3a1a1a,stroke:#d94a4a,color:#fff,font-weight:bold
+style VALID fill:#2a1a3a,stroke:#aa4ad9,color:#fff
+style OUT  fill:#1a3a3a,stroke:#4ad9d9,color:#fff
+style CLEAR fill:#3a1a1a,stroke:#d94a4a,color:#fff
+</div>
+</div>
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1a3a5a"></div>Input signals</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a2a1a"></div>Booth multiplier stages</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a1a1a"></div>Accumulator (stateful)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a3a1a"></div>Arithmetic logic</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 3 — PE Array Dataflow
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p3">
+<div class="panel-title">8×8 PE Array — Output-Stationary Dataflow</div>
+<div class="panel-desc">In output-stationary mode, partial sums stay in PE accumulators for the entire input-channel tile iteration. Weights are broadcast down each column (shared by 8 PEs with same output channel). Activations are broadcast across each row (shared by 8 PEs with same input channel).</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph TD
+
+WB["Weight Broadcast Bus\nOne 4-bit weight per column per cycle\n8 columns → 8 different output channels processed in parallel"]
+AB["Activation Broadcast Bus\nOne 8-bit activation per row per cycle\n8 rows → 8 different input channels processed in parallel"]
+
+subgraph ARRAY["8 × 8 PE Array — 64 PEs Total"]
+
+    subgraph COL_LABEL["Output Channels →   oc0   oc1   oc2   oc3   oc4   oc5   oc6   oc7"]
+
+        subgraph R0["Input Channel ic0 — Row 0"]
+            P00["PE\nr0c0"] --- P01["PE\nr0c1"] --- P02["PE\nr0c2"] --- P03["PE\nr0c3"]
+            P04["PE\nr0c4"] --- P05["PE\nr0c5"] --- P06["PE\nr0c6"] --- P07["PE\nr0c7"]
+        end
+        subgraph R1["Input Channel ic1 — Row 1"]
+            P10["PE\nr1c0"] --- P11["PE\nr1c1"] --- P12["PE\nr1c2"] --- P13["PE\nr1c3"]
+            P14["PE\nr1c4"] --- P15["PE\nr1c5"] --- P16["PE\nr1c6"] --- P17["PE\nr1c7"]
+        end
+        subgraph R2["Input Channel ic2 — Row 2"]
+            P20["PE\nr2c0"] --- P21["PE\nr2c1"] --- P22["PE\nr2c2"] --- P23["PE\nr2c3"]
+            P24["PE\nr2c4"] --- P25["PE\nr2c5"] --- P26["PE\nr2c6"] --- P27["PE\nr2c7"]
+        end
+        subgraph R7["... Rows 3–7 ..."]
+            DOTS["48 more PEs"]
+        end
+    end
+end
+
+OSRAM["Output SRAM\nReceives 64 accumulated\npartial sums after tile\ncomplete — all 64 PEs\ndrain simultaneously"]
+
+WB --> ARRAY
+AB --> ARRAY
+ARRAY --> OSRAM
+
+NOTE1["Weight Reuse:\nSame weight broadcast to\nall 8 PEs in a column\n→ reduces Weight SRAM reads by 8×"]
+NOTE2["Activation Reuse:\nSame activation broadcast to\nall 8 PEs in a row\n→ reduces Activation SRAM reads by 8×"]
+NOTE3["Partial Sum Reuse:\nAccumulators never leave PEs\nuntil full tile is complete\n→ zero off-chip partial sum traffic"]
+
+WB -.-> NOTE1
+AB -.-> NOTE2
+ARRAY -.-> NOTE3
+
+style ARRAY fill:#0f2a0f,stroke:#4a9a4a,color:#ccc
+style R0 fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style R1 fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style R2 fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style R7 fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style WB fill:#3a2a1a,stroke:#d9a44a,color:#fff
+style AB fill:#1a2a3a,stroke:#4a7ad9,color:#fff
+style OSRAM fill:#1a1a3a,stroke:#4a4ad9,color:#fff
+style NOTE1 fill:#2a2a1a,stroke:#888,color:#aaa
+style NOTE2 fill:#2a2a1a,stroke:#888,color:#aaa
+style NOTE3 fill:#2a2a1a,stroke:#888,color:#aaa
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 4 — Memory Hierarchy
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p4">
+<div class="panel-title">Memory Hierarchy — Three Levels</div>
+<div class="panel-desc">Data moves through three levels: PE register files (fastest, smallest), on-chip SRAM banks (medium), and off-chip DDR4 (largest, slowest). The design minimises DDR4 accesses using double-buffering and output-stationary dataflow.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph LR
+
+subgraph L0["Level 0 — PE Register Files\n64 PEs × per-PE storage\nLatency: 0 cycles  |  Total: ~6 KB"]
+    WRF2["Weight Regs\n8 × 4-bit per PE\n= 256 bits per PE"]
+    ARF2["Activation Regs\n4 × 8-bit per PE\n= 256 bits per PE"]
+    ACCR["Accumulator\n24-bit per PE\n= 1,536 bits per PE"]
+end
+
+subgraph L1["Level 1 — On-Chip SRAM  |  448 KB Total\nDual-port BRAM36 tiles  |  Latency: 1 cycle"]
+    WS2["Weight Buffer\n256 KB\n~57 BRAM36 tiles\nHolds one conv layer filters"]
+    AS2["Activation Buffer\n128 KB\n~29 BRAM36 tiles\nInput feature map tile"]
+    OS2["Output Buffer\n64 KB\n~15 BRAM36 tiles\n8-bit outputs after scale+clip"]
+end
+
+subgraph L2["Level 2 — Off-Chip DDR4  |  4 GB\nAXI4 burst  |  Latency: ~100 cycles"]
+    DDR_W["Full Model Weights\n~13 MB\nMobileNetV2 @ 4-bit"]
+    DDR_A["Full Feature Maps\n~25 MB\n8-bit, 224×224×64 max"]
+    DDR_OS["OS Image + Other\nRemaining capacity"]
+end
+
+DMA2["DMA Engine\nAXI4 Master\n256-beat bursts\n64-bit wide\n~8.5 GB/s peak bandwidth"]
+
+L2 -- "DMA burst\nprefetch next tile" --> DMA2
+DMA2 -- "write weight tile" --> WS2
+DMA2 -- "write activation tile" --> AS2
+WS2 -- "4-bit weights\n8 per cycle" --> WRF2
+AS2 -- "8-bit activations\n8 per cycle" --> ARF2
+WRF2 --> ACCR
+ARF2 --> ACCR
+ACCR -- "drain: 64×24-bit\nafter tile complete" --> OS2
+OS2 -- "write back or\nfeed next layer" --> DMA2
+
+style L0  fill:#1a3a1a,stroke:#4a9a4a,color:#ccc
+style L1  fill:#1a2a3a,stroke:#4a6ad9,color:#ccc
+style L2  fill:#3a2a1a,stroke:#d9a44a,color:#ccc
+style DMA2 fill:#1a3a1a,stroke:#4ad94a,color:#fff
+</div>
+</div>
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#1a3a1a"></div>Fastest (PE registers / DMA)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a2a3a"></div>On-chip SRAM (1-cycle latency)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#3a2a1a"></div>Off-chip DDR4 (~100-cycle latency)</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 5 — FSM Controller
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p5">
+<div class="panel-title">Layer Controller FSM — State Machine</div>
+<div class="panel-desc">The Layer Controller FSM orchestrates all operations: DMA requests, PE array control, tile iteration, and layer sequencing. One-hot state encoding is used for timing robustness on FPGA.</div>
+<div class="diagram-card">
+<div class="mermaid">
+stateDiagram-v2
+    [*] --> IDLE
+
+    IDLE       --> LOAD_CONFIG    : start = 1\nLoad layer params from AXI4-Lite regs
+    LOAD_CONFIG --> FETCH_WEIGHTS : config_done\nIssue DMA read → weight SRAM
+    FETCH_WEIGHTS --> FETCH_ACT   : dma_done\nIssue DMA read → activation SRAM
+    FETCH_ACT  --> COMPUTE_TILE   : dma_done\nEnable PE array, assert acc_clear
+    COMPUTE_TILE --> DRAIN_OUTPUT : all_pes_valid\nAll 64 PEs finished accumulation
+    DRAIN_OUTPUT --> NEXT_TILE    : drain_done\nquantize + relu + write output SRAM
+
+    NEXT_TILE  --> FETCH_WEIGHTS  : more_tiles = 1\nIncrement tile_row / tile_col / channel idx
+    NEXT_TILE  --> NEXT_LAYER     : more_tiles = 0\nAll tiles for this layer complete
+
+    NEXT_LAYER --> LOAD_CONFIG    : more_layers = 1\nIncrement layer_id, reload config
+    NEXT_LAYER --> DONE           : more_layers = 0\nAll layers complete
+
+    DONE       --> IDLE           : start = 0\nAssert done_irq_o to ARM PS
+
+    note right of COMPUTE_TILE
+        Tile counter registers:
+        tile_row, tile_col,
+        in_ch_idx, out_ch_idx
+    end note
+
+    note right of DRAIN_OUTPUT
+        Post-accumulation pipeline:
+        acc × M >> N → round → clip
+        → relu → output SRAM write
+    end note
+</div>
+</div>
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#4a90d9"></div>Control states (FSM one-hot encoded)</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#4ad94a"></div>Transition conditions from hardware signals</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#d94a4a"></div>Loop-back transitions (tile/layer iteration)</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 6 — Post-Accumulation Pipeline
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p6">
+<div class="panel-title">Post-Accumulation Pipeline — Quantize → ReLU → MaxPool</div>
+<div class="panel-desc">After each output tile is complete, all 64 PE accumulators are drained through this fixed pipeline. The quantize_scale unit converts 24-bit fixed-point to 8-bit using layer-specific scale and shift parameters that match QAT training.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph LR
+
+ACC2["PE Accumulator\nacc_out 24-bit\n64 values per tile drain\nSigned fixed-point"]
+
+subgraph QS2["quantize_scale.v"]
+    MULT2["Step 1: Multiply\ntemp 40-bit = acc × scale_m 16-bit\nIntermediate 40-bit prevents overflow"]
+    SHIFT2["Step 2: Right Shift\ntemp = temp >> shift_n 4-bit\nshift_n range: 0–15"]
+    ROUND2["Step 3: Round-to-Nearest-Even\ncheck discarded bits\napply tie-breaking rule\nMUST match Python golden model exactly"]
+    CLIP2["Step 4: Clip\nout 8-bit = clamp temp, 0, 255\nNegative → 0, Overflow → 255"]
+    MULT2 --> SHIFT2 --> ROUND2 --> CLIP2
+end
+
+RELU2["relu.v\nout = in 7 ? 0 : in\n8-bit saturating\nMostly pass-through after\nunsigned clip above"]
+
+subgraph MP2["max_pool.v — optional per layer"]
+    W00["px 0,0"] --- W01["px 0,1"]
+    W10["px 1,0"] --- W11["px 1,1"]
+    MAX2["MAX of 4 pixels\n2×2 window, stride 2\nOutput: 1 pixel"]
+    W00 --> MAX2
+    W01 --> MAX2
+    W10 --> MAX2
+    W11 --> MAX2
+end
+
+OSRAM2["Output SRAM\n8-bit result stored\nFed to next layer\nor DMA writeback"]
+
+ACC2 --> QS2
+CLIP2 --> RELU2
+RELU2 --> MP2
+MAX2 --> OSRAM2
+
+PARAMS["Layer Parameters\nfrom AXI4-Lite regs:\nscale_m 16-bit\nshift_n 4-bit\nUnique per layer\nDerived from QAT calibration"]
+PARAMS -.-> MULT2
+PARAMS -.-> SHIFT2
+
+style ACC2  fill:#3a1a1a,stroke:#d94a4a,color:#fff
+style QS2   fill:#1a3a3a,stroke:#4ad9d9,color:#ccc
+style RELU2 fill:#1a3a2a,stroke:#4ad97a,color:#fff
+style MP2   fill:#2a2a3a,stroke:#7a7ad9,color:#ccc
+style OSRAM2 fill:#1a1a3a,stroke:#4a4ad9,color:#fff
+style PARAMS fill:#2a2a1a,stroke:#888,color:#aaa
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 7 — MobileNetV2
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p7">
+<div class="panel-title">Software Model — MobileNetV2 Architecture (W4A8 Quantized)</div>
+<div class="panel-desc">MobileNetV2 is the software model trained on NIH ChestX-ray14 using Quantization-Aware Training (QAT). The FPGA accelerator executes each layer sequentially, layer by layer, configured via AXI4-Lite registers.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph TD
+
+INPUT["Input\n224 × 224 × 3\nChest X-Ray Image\nNormalised to 0–1"]
+
+C1["Conv2d 3×3 stride-2\n224×224×3 → 112×112×32\nW8A8 — kept full precision\nFirst layer is quantization-sensitive"]
+
+subgraph IRB["17 × Inverted Residual Blocks\nDepthwise-Separable Convolutions"]
+    B1["Bottleneck 1\n112×112×32 → 56×56×16\nExpand ratio: 1"]
+    B2["Bottleneck 2–3\n56×56×16 → 28×28×24\nExpand ratio: 6"]
+    B3["Bottleneck 4–6\n28×28×24 → 14×14×32\nExpand ratio: 6"]
+    B4["Bottleneck 7–10\n14×14×32 → 7×7×64\nExpand ratio: 6"]
+    B5["Bottleneck 11–13\n7×7×64 → 7×7×96\nExpand ratio: 6"]
+    B6["Bottleneck 14–16\n7×7×96 → 7×7×160\nExpand ratio: 6"]
+    B7["Bottleneck 17\n7×7×160 → 7×7×320\nExpand ratio: 6"]
+    B1 --> B2 --> B3 --> B4 --> B5 --> B6 --> B7
+end
+
+C2["Conv2d 1×1\n7×7×320 → 7×7×1280\nPointwise projection\nW4A8"]
+
+GAP["Global Average Pooling\n7×7×1280 → 1×1×1280"]
+
+FC["Linear 1280 → 14\nW8A8 — last layer kept\nfull precision"]
+
+SIG["Sigmoid Activation\n14 independent probabilities\nRange: 0 to 1"]
+
+OUT2["Output: 14 Disease Scores\nAtelectasis · Cardiomegaly · Effusion\nInfiltration · Mass · Nodule\nPneumonia · Pneumothorax\n+ 6 more pathologies"]
+
+INPUT --> C1 --> IRB --> C2 --> GAP --> FC --> SIG --> OUT2
+
+QUANT["Quantization Scheme\nWeights: 4-bit signed\nper-channel asymmetric\nActivations: 8-bit unsigned\nper-tensor symmetric\nExceptions: first and last layers → 8-bit"]
+QUANT -.-> IRB
+
+LOSS["Training Loss\nWeighted Binary Cross-Entropy\nweight = 1 / class_frequency\nHandles 50:1 class imbalance\nOptimiser: Adam lr=1e-4"]
+LOSS -.-> OUT2
+
+style INPUT fill:#2a1a3a,stroke:#aa6ad9,color:#fff
+style C1    fill:#1a3a5a,stroke:#4a9ad9,color:#fff
+style IRB   fill:#0f2a0f,stroke:#4a9a4a,color:#ccc
+style B1    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style B2    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style B3    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style B4    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style B5    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style B6    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style B7    fill:#1a3a1a,stroke:#4a7a4a,color:#ccc
+style C2    fill:#1a3a5a,stroke:#4a9ad9,color:#fff
+style GAP   fill:#2a2a3a,stroke:#7a7ad9,color:#fff
+style FC    fill:#1a3a5a,stroke:#4a9ad9,color:#fff
+style SIG   fill:#1a3a3a,stroke:#4ad9d9,color:#fff
+style OUT2  fill:#2a1a3a,stroke:#aa6ad9,color:#fff
+style QUANT fill:#2a2a1a,stroke:#888,color:#aaa
+style LOSS  fill:#2a2a1a,stroke:#888,color:#aaa
+</div>
+</div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     PANEL 8 — Project Phases
+══════════════════════════════════════════════════════════════ -->
+<div class="panel" id="p8">
+<div class="panel-title">Project Phases — PhD Implementation Roadmap</div>
+<div class="panel-desc">Seven sequential phases totalling 17–25 months. Phase 2 (Python model) is the critical path — it gates all hardware verification. Phases 3–4 can begin in parallel once bit-width analysis is complete.</div>
+<div class="diagram-card">
+<div class="mermaid">
+graph TD
+
+P1["Phase 1: Literature Review\n2–3 months\nNovelty matrix vs Eyeriss, Angel-Eye, NVDLA\nNIH ChestX-ray14 dataset characterisation\nResearch gap statement"]
+
+P2["Phase 2: Python Model Development\n2–3 months  ← CRITICAL PATH\nFP32 MobileNetV2 baseline on NIH CXR14\nBit-width analysis per layer\nQAT W4A8 training\nBit-accurate integer golden model\nExport .hex test vectors"]
+
+P3["Phase 3: Architecture Specification\n1–2 months\nDataflow decision and tiling strategy\nPE array sizing and resource estimate\nMemory hierarchy sizing\nInterface and register map definition"]
+
+P4["Phase 4: RTL Implementation\n4–6 months\nBooth multiplier, PE, PE array\nSRAM wrappers, quantize_scale\nLayer controller FSM\nDMA engine, AXI4-Lite slave\nFix all known RTL bugs first"]
+
+P5["Phase 5: Simulation and Formal Verification\n2–3 months\nUnit testbenches with golden comparison\nFormal verification: FSM + AXI4 protocol\nEnd-to-end co-simulation: 100 test images\nCoverage targets enforced before synthesis"]
+
+P6["Phase 6: FPGA Synthesis, PnR and Validation\n3–4 months\nVivado synthesis on ZCU104\nTiming closure at 100 MHz\nPower analysis\nHardware validation with ILA"]
+
+P7["Phase 7: Benchmarking and Publication\n3–4 months\nAll metrics: TOPS/W, AUC-ROC, latency, power\nAblation studies: precision, array size, dataflow\nStatistical analysis: bootstrap CI, p-values\nTarget: IEEE TBioCAS or IEEE TMI"]
+
+P1 --> P2
+P2 --> P3
+P2 --> P4
+P3 --> P4
+P4 --> P5
+P5 --> P6
+P6 --> P7
+
+GATE1["Gate: AUC-ROC ≥ 0.80\nQAT drop < 0.02\nBit-accurate golden model verified"]
+GATE2["Gate: All unit tests pass\nStatement coverage ≥ 95%\nFormal checks PASS"]
+GATE3["Gate: WNS ≥ 0 ns\nHardware matches simulation\nPower ≤ 5W"]
+
+P2 --> GATE1 --> P4
+P5 --> GATE2 --> P6
+P6 --> GATE3 --> P7
+
+style P1 fill:#1a2a3a,stroke:#4a6ad9,color:#fff
+style P2 fill:#3a1a1a,stroke:#d94a4a,color:#fff,font-weight:bold
+style P3 fill:#1a2a3a,stroke:#4a6ad9,color:#fff
+style P4 fill:#2a2a1a,stroke:#d9c44a,color:#fff
+style P5 fill:#1a3a2a,stroke:#4ad97a,color:#fff
+style P6 fill:#2a1a3a,stroke:#aa4ad9,color:#fff
+style P7 fill:#1a3a3a,stroke:#4ad9d9,color:#fff
+style GATE1 fill:#3a1a1a,stroke:#ff6a4a,color:#fff
+style GATE2 fill:#3a1a1a,stroke:#ff6a4a,color:#fff
+style GATE3 fill:#3a1a1a,stroke:#ff6a4a,color:#fff
+</div>
+</div>
+<div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#3a1a1a"></div>Critical path (Phase 2) / Gates</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a2a3a"></div>Planning phases</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#2a2a1a"></div>Implementation</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a3a2a"></div>Verification</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#1a3a3a"></div>Benchmarking & Publication</div>
+</div>
+</div>
+
+</div><!-- /panels -->
+
+<script>
+const btns   = document.querySelectorAll('.tab-btn');
+const panels = document.querySelectorAll('.panel');
+function show(i) {
+    btns.forEach((b,j)   => b.classList.toggle('active',   j===i));
+    panels.forEach((p,j) => p.classList.toggle('active',   j===i));
+}
+</script>
+</body>
+</html>
