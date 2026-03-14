@@ -18,8 +18,8 @@
 # =============================================================================
 
 VIVADO   := E:/Xilinx/2025.2/Vivado/bin/vivado.bat
-IVERILOG := iverilog
-VVP      := vvp
+IVERILOG := /c/iverilog/bin/iverilog
+VVP      := /c/iverilog/bin/vvp
 
 # ---- RTL sources (all synthesizable .v files, order matters for hierarchy) --
 RTL_CORE   := $(wildcard rtl/core/*.v)
@@ -37,7 +37,7 @@ TB_ALL     := $(wildcard tb/*.v)
 .PHONY: sim sim_cnn sim_counter clean
 
 ## Run all simulations
-sim: sim_booth sim_cnn sim_top sim_counter
+sim: sim_booth sim_cnn sim_top sim_cxr sim_counter
 
 ## Unit test: booth_mult exhaustive 65536-case sweep
 sim_booth: rtl/core/booth_mult.v tb/tb_booth_mult.v
@@ -60,6 +60,22 @@ sim_cnn: $(RTL_ALL) tb/tb_simple_cnn.v
 	  rtl/top/simple_cnn.v \
 	  tb/tb_simple_cnn.v
 	$(VVP) sim/simple_cnn.vvp
+
+## Binary classifier: chest X-ray 5-stage pipeline (IMAGE_WIDTH=128 for sim)
+sim_cxr: $(RTL_ALL) tb/tb_chest_xray_cnn.v
+	@mkdir -p sim
+	$(IVERILOG) -g2001 -Wall \
+	  -o sim/chest_xray_cnn.vvp \
+	  rtl/core/booth_mult.v \
+	  rtl/core/relu.v \
+	  rtl/core/max_pool.v \
+	  rtl/core/fc_layer.v \
+	  rtl/core/global_avg_pool.v \
+	  rtl/layers/conv_layer.v \
+	  rtl/layers/conv_block.v \
+	  rtl/top/chest_xray_cnn.v \
+	  tb/tb_chest_xray_cnn.v
+	$(VVP) sim/chest_xray_cnn.vvp
 
 ## Integration test: structural/reset behaviour (tb_top)
 sim_top: $(RTL_ALL) tb/tb_top.v
@@ -105,6 +121,10 @@ synth_counter:
 
 impl:
 	$(VIVADO) -mode batch -source syn/scripts/impl_cnn.tcl
+
+## Full implementation for binary classifier (place & route, bitstream)
+impl_cxr:
+	$(VIVADO) -mode batch -source syn/scripts/impl_chest_xray.tcl
 
 # =============================================================================
 # Clean

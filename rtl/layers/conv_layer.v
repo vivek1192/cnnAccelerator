@@ -67,8 +67,10 @@ module conv_layer #(
     //    delay1[IMAGE_WIDTH-1] = pixel from IMAGE_WIDTH cycles ago (1 row ago)
     //    delay2[IMAGE_WIDTH-1] = pixel from 2×IMAGE_WIDTH cycles ago (2 rows ago)
     // =========================================================================
-    reg [7:0] delay1 [0:IMAGE_WIDTH-1];
-    reg [7:0] delay2 [0:IMAGE_WIDTH-1];
+    // BRAM pragma: Vivado infers RAMB36E2 for IMAGE_WIDTH >= 512 (≥4 Kb).
+    // For smaller widths it uses SRL16E or distributed RAM automatically.
+    (* ram_style = "block" *) reg [7:0] delay1 [0:IMAGE_WIDTH-1];
+    (* ram_style = "block" *) reg [7:0] delay2 [0:IMAGE_WIDTH-1];
 
     // =========================================================================
     // 3. Column tap registers for each of the 3 row positions
@@ -83,7 +85,7 @@ module conv_layer #(
     // =========================================================================
     // 4. Position tracking
     // =========================================================================
-    reg [3:0] col_cnt;    // 0..IMAGE_WIDTH-1
+    reg [11:0] col_cnt;   // 0..IMAGE_WIDTH-1 (12-bit supports up to 4096-wide)
     reg       rows_full;  // set after the first 3 rows have been received
     reg [1:0] row_fill;   // 0,1,2 → becomes rows_full after 3rd row completes
 
@@ -196,7 +198,7 @@ module conv_layer #(
             if (col_cnt == IMAGE_WIDTH - 1) begin
                 col_cnt <= 4'd0;
                 if (!rows_full) begin
-                    if (row_fill == 2'd2)
+                    if (row_fill == 2'd1)
                         rows_full <= 1'b1;
                     else
                         row_fill <= row_fill + 2'd1;
